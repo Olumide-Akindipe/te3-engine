@@ -222,8 +222,8 @@ if enable_battery:
 
 enable_net_metering = st.sidebar.checkbox("Enable Net Energy Metering (NEM)", value=True)
 enable_peak_shaving = st.sidebar.checkbox("Enable Battery Peak Shaving", value=True)
-enable_demand_response = st.sidebar.checkbox("Enroll in NYISO DR Market VPP", value=False)
-enable_islanding = st.sidebar.checkbox("Enable Microgrid Islanding (Backup for Grid Outages)) ", value=False)
+enable_demand_response = st.sidebar.checkbox("Enable NYISO DR Market VPP", value=False)
+enable_islanding = st.sidebar.checkbox("Enable Microgrid Islanding (Backup for Grid Outages) ", value=False)
 
 # =====================================================================
 # 3. DYNAMIC GEOLOCATION ENGINE
@@ -572,6 +572,7 @@ def generate_comprehensive_pdf(zipcode, city, sun_hours, capacity, facility, bat
     print_audit_formula("2. Grid Energy Demand Offset Model", "D_offset = Min( (E_annual / L_facility) * 100, 100% )")
     print_audit_formula("3. Financial OpEx Mitigation Model", "S_annual = E_annual x R_tariff")
     print_audit_formula("4. Simple Investment Payback Vector", "P_years = C_capital / S_annual")
+    print_audit_formula("5. Microgrid Islanding (Backup Power Duration)", "T_backup = (C_bess / (L_critical x 0.50)) x F_solar")
     pdf.ln(2)
 
     # Render 4-Column Audit Matrix Table
@@ -600,10 +601,14 @@ def generate_comprehensive_pdf(zipcode, city, sun_hours, capacity, facility, bat
         ("n_system", "%", "System Efficiency Factor: Performance coefficient forcing a 14% system loss.", "IEC 61724-1 Standard"),
         ("D_offset", "%", "Grid Energy Demand Offset: Total percentage tracking net grid avoidance.", "Calculated Performance Output"),
         ("L_facility", "kWh/yr", "Annual Facility Load: Baseline electricity draw hardcoded to asset classification.", "U.S. DOE / NREL ComStock"),
+        ("L_critical", "kW", "Critical Facility Demand: Exact amount of continous electricity needed to sustain the facility during grid outage", "Asset Operational Load Baseline"),
         ("S_annual", "$/yr", "Estimated Annual Savings: Gross operational budget baseline utility savings.", "Calculated Financial Output"),
         ("R_tariff", "$/kWh", "Applied Retail Electricity Rate: Regional utility power pricing applied to asset.", "U.S. EIA Form 861 Surveys"),
         ("P_years", "Years", "Simple Payback Period: Baseline amortization tracking net asset recovery speed.", "Calculated Financial Output"),
-        ("C_capital", "$", "Net Capital Cost: Total estimated fiscal deployment footprint calculations.", "Calculated Investment Metric")
+        ("C_capital", "$", "Net Capital Cost: Total estimated fiscal deployment footprint calculations.", "Calculated Investment Metric"),
+        ("T_backup", "Hours", "Microgrid Islanding: Total hours the facility remains active during an outage.", "Calculated Resilience Output"),
+        ("C_bess", "kWh", "Battery Energy Capacity: Total storage volume of hardware setup.", "User Specified / Sizing Input"),
+        ("F_solar", "Coeff.", "Solar Replenishment Factor: Dynamic daytime battery charging scaling coefficient.", "NREL Resource Profile Integration")
     ]
 
     # Print Table Body with alternating row colors (Zebra striping)
@@ -741,7 +746,7 @@ if is_valid_zip:
             
             col_fin1, col_fin2 = st.columns([3, 2])
             with col_fin1:
-                st.markdown("### 💵 Financial Impact")
+                st.markdown("### 💵 Financial Outcomes")
                 
                 st.metric(
                     label="Estimated Annual Savings", 
@@ -806,9 +811,9 @@ if is_valid_zip:
                 if enable_islanding:
                     st.markdown(f"""
                         <div class="resilience-badge">
-                            🛡️ <b>Backup Power Duration:</b> Microgrid islanding capability is active. 
-                            This asset can sustain basic operational parameters for an estimated <b>{metrics['autonomy']} hours</b> 
-                            completely detached from the primary power grid infrastructure.
+                            🛡️ <b>Backup Power Duration:</b> Microgrid islanding is active.  
+                            The system can sustain critical operations for up to <b>{metrics['autonomy']} hours</b> 
+                            during a prolonged grid outage, based on modeled emergency load-shedding and battery discharge assumptions. 
                         </div>
                     """, unsafe_allow_html=True)
                     
