@@ -196,7 +196,7 @@ FACILITY_PROFILES = {
 # 2. USER INTERFACE LAYER (SIDEBAR CONTROLS)
 # =====================================================================
 st.sidebar.header("⚙️ System Configurations")
-raw_zip = st.sidebar.text_input("Target 5-Digit US ZIP Code:", value="12203")
+raw_zip = st.sidebar.text_input("Target 5-Digit US ZIP Code:", value="")
 clean_zip = raw_zip.strip()
 
 is_valid_zip = bool(re.match(r"^\d{5}$", clean_zip))
@@ -845,5 +845,23 @@ if is_valid_zip:
 
     else:
         st.error(f"❌ Geocoding Exception: Could not find geographic coordinates for ZIP code `{clean_zip}`.")
+
+
 else:
-    st.warning("Please configure a valid 5-digit US ZIP code in the configuration module.")
+    # Custom styled HTML block to replace st.warning with larger fonts
+    st.markdown(
+        """
+        <div style="
+            background-color: #fffde7; 
+            padding: 24px; 
+            border-left: 6px solid #fbc02d; 
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        ">
+            <span style="font-size: 28px; font-weight: 500; color: #5d4037; line-height: 1.5;">
+                👋 Welcome to the TE3 Engine! Please configure a valid 5-digit US ZIP code in the configuration module to begin your evaluation.
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
