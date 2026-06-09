@@ -140,13 +140,43 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Main Dashboard Branding Mount
-st.markdown("""
-    <div class="header-container">
-        <h1 class="header-title">⚡ TE3 ENGINE</h1>
-        <div class="header-subtitle">A Decision Support Tool for Energy Infrastructure Planning and Grid Resilience</div>
+# Modern, High-Impact Landing Page Hero Banner
+st.markdown(
+    """
+    <div style="
+        background-color: #112d4e; 
+        padding: 35px 40px; 
+        border-radius: 8px; 
+        box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        margin-bottom: 25px;
+    ">
+        <h1 style="
+            color: #ffffff; 
+            font-size: 42px; 
+            font-weight: 800; 
+            margin: 0 0 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            letter-spacing: -0.5px;
+        ">
+            <span>⚡</span> TE3 ENGINE
+        </h1>
+        <p style="
+            color: #ffcc00; 
+            font-size: 18px; 
+            font-weight: 700; 
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin: 0;
+            line-height: 1.4;
+        ">
+            A Decision Support Tool for Energy Infrastructure Planning and Grid Resilience
+        </p>
     </div>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True
+)
 
 # EXPANDED FACILITY PROFILES WITH DYNAMIC NATIONAL GRID ELECTRIC TARIFF MAPPING (May 2026 Reference)
 FACILITY_PROFILES = {
@@ -196,7 +226,7 @@ FACILITY_PROFILES = {
 # 2. USER INTERFACE LAYER (SIDEBAR CONTROLS)
 # =====================================================================
 st.sidebar.header("⚙️ System Configurations")
-raw_zip = st.sidebar.text_input("Target 5-Digit US ZIP Code:", value="")
+raw_zip = st.sidebar.text_input("Enter ZIP Code:", value="", max_chars=5, placeholder="e.g., 10001")
 clean_zip = raw_zip.strip()
 
 is_valid_zip = bool(re.match(r"^\d{5}$", clean_zip))
@@ -210,7 +240,7 @@ system_capacity_kw = st.sidebar.slider("Proposed Solar Capacity (kW):", min_valu
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🔌 Interconnection Strategy")
-enable_battery = st.sidebar.checkbox("Deploy Storage Hardware (BESS)", value=True)
+enable_battery = st.sidebar.checkbox("Deploy Battery Storage (BESS)", value=False)
 
 bess_duration = 2
 if enable_battery:
@@ -220,10 +250,11 @@ if enable_battery:
         format_func=lambda x: f"{x}-Hour Setup (Battery Peak Shaving Focus)" if x == 2 else f"{x}-Hour Setup (Emergency Reserves Focus)"
     )
 
-enable_net_metering = st.sidebar.checkbox("Enable Net Energy Metering (NEM)", value=True)
-enable_peak_shaving = st.sidebar.checkbox("Enable Battery Peak Shaving", value=True)
+enable_net_metering = st.sidebar.checkbox("Enable Net Energy Metering (NEM)", value=False)
+enable_peak_shaving = st.sidebar.checkbox("Enable Battery Peak Shaving", value=False)
 enable_demand_response = st.sidebar.checkbox("Enable NYISO DR Market VPP", value=False)
 enable_islanding = st.sidebar.checkbox("Enable Microgrid Islanding (Backup for Grid Outages) ", value=False)
+
 
 # =====================================================================
 # 3. DYNAMIC GEOLOCATION ENGINE
@@ -848,17 +879,27 @@ if is_valid_zip:
 
 
 else:
-    # Custom styled HTML block to replace st.warning with larger fonts
+    # Optimized container that pops elegantly against a white background
     st.markdown(
         """
         <div style="
-            background-color: #fffde7; 
-            padding: 24px; 
-            border-left: 6px solid #fbc02d; 
-            border-radius: 4px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            background-color: #fdfbf7; 
+            padding: 30px 35px; 
+            border-left: 6px solid #f0ad4e; 
+            border-right: 1px solid #e9e3d5;
+            border-top: 1px solid #e9e3d5;
+            border-bottom: 1px solid #e9e3d5;
+            border-radius: 8px;
+            margin: 20px 0px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
         ">
-            <span style="font-size: 28px; font-weight: 500; color: #5d4037; line-height: 1.5;">
+            <span style="
+                font-size: 26px; 
+                font-weight: 500; 
+                color: #7d6333; 
+                line-height: 1.6; 
+                display: block;
+            ">
                 👋 Welcome to the TE3 Engine! Please configure a valid 5-digit US ZIP code in the configuration module to begin your evaluation.
             </span>
         </div>
