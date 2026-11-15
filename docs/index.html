@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TE3 Engine</title>
+<meta name="description" content="TE3 Engine: a screening tool for municipal solar PV and battery storage investments in New York State.">
+<style>
+  :root {
+    --navy: #1f3a56; --text: #0f172a; --muted: #475569; --line: #e2e8f0;
+    --bg: #ffffff; --soft: #f8fafc; --accent: #0891b2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --text: #e2e8f0; --muted: #94a3b8; --line: #334155; --bg: #0f172a; --soft: #1e293b; --accent: #22d3ee; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 "Segoe UI", Helvetica, Arial, sans-serif; }
+  header { background: var(--navy); color: #fff; padding: 48px 16px 40px; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 16px; }
+  header .wrap { padding: 0; }
+  h1 { margin: 0 0 8px; font-size: 2.2rem; letter-spacing: -0.5px; }
+  header p { margin: 0; color: #cbd5e1; font-size: 1.1rem; max-width: 640px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+  .btn { display: inline-block; padding: 10px 18px; border-radius: 8px; font-weight: 600; text-decoration: none; border: 1px solid rgba(255,255,255,0.4); color: #fff; }
+  .btn.primary { background: #f0ad4e; border-color: #f0ad4e; color: #112233; }
+  main { padding: 32px 0 56px; }
+  h2 { font-size: 1.25rem; margin: 40px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
+  figure { margin: 0; }
+  figure img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); background: #fff; }
+  figcaption { color: var(--muted); font-size: 0.9rem; margin-top: 8px; }
+  ul { padding-left: 1.2rem; }
+  li { margin-bottom: 6px; }
+  .note { background: var(--soft); border-left: 4px solid var(--accent); padding: 12px 16px; border-radius: 6px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { width: 34%; font-weight: 600; }
+  a { color: var(--accent); }
+  pre { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 14px; white-space: pre-wrap; word-break: break-word; font-size: 0.9rem; }
+  footer { border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; padding: 20px 0 40px; }
+  @media (max-width: 560px) { h1 { font-size: 1.8rem; } td:first-child { width: 40%; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>TE3 Engine</h1>
+    <p>A screening tool for municipal solar PV and battery storage investments in New York State.</p>
+    <div class="buttons">
+      <a class="btn primary" href="https://te3-engine.streamlit.app">Open the app</a>
+      <a class="btn" href="PAPER-DOI-URL">Working paper</a>
+      <a class="btn" href="https://github.com/Olumide-Akindipe/te3-engine">Source code</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <p>From a ZIP code, a facility type and a solar array size, TE3 Engine estimates annual solar generation, the share of facility electricity use met by solar, annual savings by revenue stream, net capital cost, simple payback and, when selected, an indicative backup duration. Each run produces a four page PDF screening report that shows every formula and source.</p>
+
+  <p class="note">Results are screening estimates that show whether a detailed study is warranted. They are not a design, an investment grade analysis, or tax or legal advice.</p>
+
+  <h2>How it works</h2>
+  <figure>
+    <img src="te3-overview.svg" alt="TE3 Engine system overview: inputs, data sources, model formulas F1 to F11, and outputs, with planned work">
+    <figcaption>Inputs, data, model and outputs of Version 1.</figcaption>
+  </figure>
+
+  <h2>Version 1 at a glance</h2>
+  <table>
+    <tr><td>Coverage</td><td>New York State ZIP codes; National Grid (Niagara Mohawk) tariffs and rates</td></tr>
+    <tr><td>Facility types</td><td>12 municipal types, from offices and schools to water plants and street lighting</td></tr>
+    <tr><td>Revenue streams</td><td>On site energy savings, net metering, battery peak shaving, NYISO demand response</td></tr>
+    <tr><td>Solar resource</td><td>PVWatts v8 with National Solar Radiation Database data</td></tr>
+    <tr><td>Verification</td><td>Three rounds of acceptance testing, 12 automated tests, a check of every cited link</td></tr>
+  </table>
+
+  <h2>Documentation</h2>
+  <ul>
+    <li><a href="PAPER-DOI-URL">Working paper, Revision 2 (November 2026)</a>: methods, data, verification, limitations and a worked example</li>
+    <li><a href="https://github.com/Olumide-Akindipe/te3-engine#readme">README</a>: installation, API key, tests and limitations</li>
+  </ul>
+
+  <h2>Cite</h2>
+  <pre>Akindipe, S. O. (2026). TE3 Engine: Techno-Economic Evaluation Engine (Version 1.0) [Computer software]. SOFTWARE-DOI-URL
+
+Akindipe, S. O. (2026). TE3 Engine: A Techno-Economic Screening Framework for Municipal Solar PV and Battery Storage, New York State Implementation (Version 1). Working Paper, Revision 2. PAPER-DOI-URL</pre>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Stephen Olumide Akindipe, Independent Researcher, Albany, NY, USA ·
+    <a href="https://orcid.org/0000-0002-1846-9662">ORCID 0000-0002-1846-9662</a><br>
+    Software: MIT License. Documentation: CC BY 4.0.
+  </div>
+</footer>
+
+</body>
+</html>

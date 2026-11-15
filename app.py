@@ -1,22 +1,37 @@
 import os
 import re
+import html
+import datetime
 import requests
 import streamlit as st
 from dotenv import load_dotenv
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 
 # =====================================================================
 # 1. APPLICATION INITIALIZATION & CONFIGURATION
 # =====================================================================
 load_dotenv()
-NREL_API_KEY = os.getenv("NREL_API_KEY")
 
+# [FIX B8] set_page_config must be the first Streamlit command
 st.set_page_config(
     page_title="TE3 Engine",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+NREL_API_KEY = os.getenv("NREL_API_KEY")
+if not NREL_API_KEY:
+    try:
+        NREL_API_KEY = st.secrets.get("NREL_API_KEY", None)
+    except Exception:  # [FIX B8] no secrets.toml locally
+        NREL_API_KEY = None
+#✅For API security, dynamically routes to local .env first, then falls back to Streamlit Cloud Secrets
+if not NREL_API_KEY:
+    st.error("Configuration Error: NREL API key is missing.")
+    st.stop() # Halts script compilation execution immediately
+
 
 # MODERN ENTERPRISE UI STYLING INJECTION (CSS)
 # =====================================================================
@@ -178,87 +193,79 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# EXPANDED FACILITY PROFILES WITH DYNAMIC NATIONAL GRID ELECTRIC TARIFF MAPPING (Verified 2026 Reference)
-FACILITY_PROFILES = {
-    "Municipal Office Building": {
-        "demand": 75000, "base_kw": 25, "rate": 0.19,   #✅ Standard SC-2 Demand Tier
-        "desc_simple": "Office buildings use most of their electricity during the day, making them strong candidates for solar systems that can directly reduce annual electricity costs.",
-        "desc_technical": "Daytime-operated municipal facility with predictable load patterns. The primary opportunity lies in reducing annual electricity costs through solar generation, with limited exposure to peak demand charges due to relatively stable load profiles."
-    },
-    "Commercial Office Building": {
-        "demand": 240000, "base_kw": 75, "rate": 0.18,
-        "desc_simple": "Commercial office buildings have significant energy demands during business hours, making them ideal candidates for solar installations that can offset electricity costs.",
-        "desc_technical": "High-demand commercial facility with predictable daytime load patterns due to higher occupancy and extended operational hours. Strong potential for reducing annual electricity costs through solar generation, with moderate exposure to peak demand charges."
-    },
-    "Public School Facility": {
-        "demand": 380000, "base_kw": 120, "rate": 0.13,  ## ✅ Correct SC-3 Large General Service Step-down
-        "desc_simple": "Schools have high energy use during the day and seasonal swings, creating strong opportunities to reduce both electricity bills and peak demand costs using solar and battery systems.",
-        "desc_technical": "Schools are associated with high daytime and seasonal load variability driven by student and staff occupancy schedules. Significant opportunity for both volumetric energy cost reduction and demand charge mitigation through integrated solar generation and battery-enabled peak shaving."
-    },
-    "Multi-Family Housing": {
-        "demand": 450000, "base_kw": 65, "rate": 0.11, 
-        "desc_simple": "Residential buildings use electricity throughout the day, with peaks in the morning and evening. Solar systems can reduce overall costs, while storage can help shift energy to when it's most needed.",
-        "desc_technical": "Continuous 24-hour residential load profile with pronounced morning and evening peaks. Strong candidate for solar-based cost offset, with moderate opportunity for load shifting and distributed energy optimization through storage integration."
-    },
-    "Wastewater Treatment Plant": {
-        "demand": 1500000, "base_kw": 250, "rate": 0.11, 
-        "desc_simple": "Wastewater plants run 24/7 and consume large amounts of energy. The main benefit of this system is improving reliability and protecting operations during power outages while stabilizing long-term energy costs.",
-        "desc_technical": "Energy-intensive critical infrastructure operating continuously under high mechanical load conditions. Primary value lies in resilience enhancement and long-term energy cost stabilization, given constant demand and operational risk exposure during grid disruptions."
-    },
-    "Water Treatment & Pumping Station": {
-        "demand": 1150000, "base_kw": 220, "rate": 0.12, 
-        "desc_simple": "Water systems require constant energy with occasional spikes from pumping. Solar and storage can help reduce peak costs and improve system reliability.",
-        "desc_technical": "Essential public utility asset with continuous baseline demand and periodic high-load pumping cycles. Offers strong potential for demand charge mitigation and resilience enhancement through coordinated solar generation and battery dispatch strategies.",
-    },
-    "Smart Street Lighting System": {
-        "demand": 110000, "base_kw": 0, "rate": 0.14,   # ✅ Corrected: Unmetered accounts have 0 kW active demand
-        "desc_simple": "Street lighting uses energy mostly at night, making it ideal for systems that store solar energy during the day and use it after dark to reduce costs.",
-        "desc_technical": "Nighttime-dominant municipal load with predictable usage patterns. Highly compatible with solar-plus-storage systems that enable daytime energy capture and nighttime discharge, maximizing energy arbitrage and cost efficiency."
-    },
-    "Traffic Signal Network": {
-        "demand": 35000, "base_kw": 4, "rate": 0.19, 
-        "desc_simple": "Traffic signals use relatively little energy but must stay operational at all times. The main value of this system is ensuring reliability and safety during outages.",
-        "desc_technical": "Low-load but mission-critical infrastructure requiring continuous uptime. Primary value of DER integration lies in resilience, enabling localized backup power and microgrid isolation capabilities to ensure uninterrupted operation."    
-    },
-    "Emergency Operations Center (EOC)": {
-        "demand": 500000, "base_kw": 110, "rate": 0.13, 
-        "desc_simple": "Emergency centers must stay operational at all times. Solar and battery systems help reduce costs while ensuring backup power during grid outages.",
-        "desc_technical": "Mission-critical municipal facility requiring 100% operational continuity. It requires highest priority for resilience planning, with DER systems providing both cost mitigation and essential backup power through microgrid islanding capabilities."
-    }
-}
+# [FIX R2] FACILITY PROFILES: derived from documented sources in facility_profiles.py (same keys as before:
+# demand, base_kw, rate, tariff, desc_simple, desc_technical; plus tariff_class, demand_charge, load_factor,
+# data_quality, demand_source, rate_source). New York values for Version 1. facility_profiles.py must be
+# deployed in the same folder as this app.
+from facility_profiles import FACILITY_PROFILES
 
-# Reference Standards
-# Engineering Reference Checklist For Code Documentation
-# 1. U.S. Energy Information Administration (EIA), "Commercial Buildings Energy Consumption Survey (CBECS): Energy Characteristics & Consumption Baselines for the Northeast Census Region," 2022-2026 Data Tables. Available: https://www.eia.gov/consumption/commercial/
-# [2] U.S. Environmental Protection Agency (EPA), "ENERGY STAR Portfolio Manager Technical Reference: Building Energy Performance Metrics and National Median Benchmarks," Climate Region 1 Reference Sheets. Available: https://www.energystar.gov/buildings/benchmark
-# [3] Niagara Mohawk Power Corp d/b/a National Grid, "Schedule for Electric Service, P.S.C. No. 220 Electricity: Non-Residential Service Classifications SC-2 (Demand) and SC-3 (Large General Service Primary & Secondary)," Upstate New York Tariff Statements. Available: https://www.nationalgridus.com/Upstate-NY-Business/Rates/Tariff-Provisions
-
-# B. Commercial & Institutional Baseline Metrics
-# [4] EIA CBECS (Commercial Buildings Energy Consumption Survey): This provides the core regional electricity use footprints across the Northeast United States. You can review building specific consumption datasets through the EIA CBECS Survey Overview Data Portal and explore deeper building profile classifications directly at the EIA Commercial Energy Consumption Main Reports Hub.
-# [5] EPA ENERGY STAR Portfolio Manager: This is the standard operational matrix for scoring institutional building efficiency and verifying median load profiles. You can analyze regional medians for assets like K-12 schools and multi-family infrastructure via the EPA ENERGY STAR Portfolio Manager Data Explorer Tool. To benchmark initial software assumptions against strict federal standards, review the foundational data input logic via the ENERGY STAR Portfolio Manager Technical Reference Guide.
-
-# C. New York State Electricity Tariffs & Municipal Baselines
-# To track the dynamic shift between the SC-2 Small General Service and SC-3 Large General Service blended volumetric and demand structures, use the active New York State regulatory filings:
-# [6] National Grid NY Electric Tariffs (PSC No. 220): You can look up active service classifications, delivery constraints, and fixed customer charges directly through the National Grid Upstate NY Tariff Provisions Portal. To track historical supply commodity variance or evaluate active 2026 fuel cost balancing modifications, access the direct monthly pricing statement schedules via the National Grid PSC 220 Electricity Commodity Billing Sheet (PDF).
-# [7] NYSERDA Benchmarking Frameworks: To cross-reference how New York municipal bodies catalog public asset consumption limits, study the active operational tools deployed in the NYSERDA Clean Energy Communities Benchmarking Toolkit.
+# Reference Standards [FIX R2]
+# Full source register with links: te3-archetype-data-sources.md. Principal sources:
+# [1] U.S. EIA, 2018 CBECS Tables B16 (floor area), C14 and C15 (electricity intensity, national and by Census region).
+#     https://www.eia.gov/consumption/commercial/data/2018/index.php
+# [2] U.S. DoD, UFC 3-501-03N (2004), load factor ranges by facility type; checked against National Grid 2026 class
+#     load shapes. https://everyspec.com/DoD/DoD-UFC/ufc_3_501_03n-16jan2004_3797/ ;
+#     tables reproduced: https://cdn.ez-pdh.com/course-material/EE910-Introduction-to-Electric-Power-Requirements-for-Buildings2.pdf ;
+#     https://www.nationalgridus.com/Upstate-NY-Business/Supply-Costs/Load-Profiles
+# [3] EPRI via ACEEE (water, about 1,824 kWh/MG); NYSERDA (New York wastewater, about 1,700 kWh/MG).
+#     https://www.aceee.org/files/proceedings/2005/data/papers/SS05_Panel05_Paper05.pdf
+#     https://www.nyserda.ny.gov/-/media/Project/Nyserda/Files/Publications/Research/Environmental/Energy-Efficiency-Municipal-WWTP.pdf
+# [4] Energy rate: U.S. EIA, 2024 Utility Bundled Retail Sales, Commercial (Form EIA-861, Table 7), Niagara Mohawk
+#     10.43 cents/kWh. https://www.eia.gov/electricity/sales_revenue_price/pdf/table_7.pdf
+# [5] Demand charges: National Grid Upstate NY Business Service Rates (PSC No. 220): SC-2 Demand $18.93/kW;
+#     SC-3 Secondary $15.62/kW over 40 kW. https://www.nationalgridus.com/Upstate-NY-Business/Rates/Service-Rates
+# [6] Tariff classes: National Grid PSC No. 220 and PSC No. 214 statements.
+#     https://www.nationalgrid.com/document/598616/download ; https://www.nationalgrid.com/document/598626/download
 
 
 
 # DR MARKET CONFIGURATION — NYISO SCR UPSTATE NY REFERENCE RATES
 DR_CAPACITY_RATE = 20.00  # $/kW-year for capacity enrolled in NYISO DR programs (subject to market fluctuations and program eligibility) — upstate NY SCR conservative estimate
-                           # Based on NYISO upstate zones A-E 2026 clearing prices
-                           # Source: Modo Energy NYISO April 2026 benchmark report
+                           # [FIX R2] Basis: NYCA capacity prices of $2 to $6/kW-month since 2023 (Modo Energy, Nov 2025)
+                           # and $5.83 to $6.74/kW-month in May to June 2026 monthly auctions (Rise Energy, May 2026).
+                           # At the 2026-27 SCR capacity accreditation factor of 74.17% (NYISO, Rest of State) this
+                           # implies about $18 to $53 per enrolled kW-year before aggregator fees; $20 is the low end.
+                           # https://modoenergy.com/research/en/nyiso-capacity-market-december-auction-bess-revenues
+                           # https://riseenergyservices.com/wp-content/uploads/2026/05/Rise-Energy-Services-May-2026-Market-Update.pdf
+                           # https://www.nyiso.com/documents/20142/41593818/Final-Capacity-Accreditation-Factors-for-the-2026-2027-capability-year.pdf/83685470-882d-66d2-e6d8-68ed4d449e44
 
+# [FIX DR] Research-based DR dispatch factors
+# Definition: share of battery power (kW) offered to the NYISO Special Case Resources (SCR) program, after
+# reserving battery capacity for backup power. Enrolled kW is further limited in the model (Section 4) by:
+#   (a) the 4-hour SCR performance obligation: a battery can sustain kW x Min(duration / 4, 1) for 4 hours
+#   (b) the facility peak demand: SCR performance is measured as a reduction from the facility's baseline load,
+#       so a behind-the-meter battery cannot be credited for more than the load it serves
+# Sources:
+#   [DR-1] NYISO, "Demand Response: Special Case Resources" (4-hour minimum, 100 kW minimum by aggregation,
+#          Average Coincident Load and Customer Baseline Load measurement, Responsible Interface Party enrollment)
+#          https://www.nyiso.com/documents/20142/30712914/Demand-Response-Special-Case-Resources.pdf
+#   [DR-2] NYISO, "Demand Response Resources," New York Market Orientation Course, March 2025 (SCRs are activated
+#          when Operating Reserves are forecast to be short or during an actual Operating Reserve Deficiency)
+#          https://www.nyiso.com/documents/20142/3037451/9-Demand-Response.pdf/3d224420-5b44-a282-5cc9-c082f497d112
+#   [DR-3] Thompson, Song, Lekov and McKane, "Automated Demand Response Opportunities in Wastewater Treatment
+#          Facilities," LBNL-1244E, 2008 (essential process equipment limits load shed)
+#          https://www.osti.gov/biblio/944125
+# Values marked ASSUMPTION are engineering judgments derived from the sources above, not published factors.
+SC3_FIXED_BLOCK_KW = 40  # [FIX L3] National Grid SC-3 Secondary: first 40 kW billed as a block ($624.80), [5] above
+SCR_MIN_DURATION_HOURS = 4  # [DR-1] SCR load reduction must be sustainable for at least 4 consecutive hours
+# [FIX ITC] One notice text for the app and the PDF. Source: IRS Notice 2025-42; 2025 federal tax law (OBBBA).
+# https://www.irs.gov/pub/irs-drop/n-25-42.pdf
+ITC_TIMING_NOTE = ("The 30% federal Investment Tax Credit applies to solar only if the project began construction by "
+                   "July 4, 2026 or be placed in service by December 31, 2027. Confirm eligibility with a tax expert. "
+                   "Without the credit, net capital cost rises by 30% of the gross capital cost.")
 DR_DISPATCH_FACTORS = {
-    "Municipal Office Building": 0.25,      ## Baseline municipal administrative load
-    "Commercial Office Building": 0.30,     ## Added: High flexibility via HVAC setbacks/lighting dims
-    "Public School Facility": 0.25,         ## High summer alignment, daytime loads
-    "Multi-Family Housing": 0.15,           ## Low flexibility due to continuous residential load
-    "Wastewater Treatment Plant": 0.10,     ## Process-heavy critical infrastructure
-    "Water Treatment & Pumping Station": 0.10,  ## High critical load requirements, limited flexibility
-    "Smart Street Lighting System": 0.0,    ## Excluded from traditional SCR
-    "Traffic Signal Network": 0.0,          ## Zero curtailment permitted for public safety
-    "Emergency Operations Center (EOC)": 0.0,       ## Mission-critical baseline
+    "Municipal Office Building": 1.0,           ## Non-critical load; full battery available (ASSUMPTION)
+    "Police Station": 0.0,                      ## Battery reserved for backup; SCR events are called during system emergencies [DR-2]
+    "Fire Station": 0.0,                        ## Battery reserved for backup; emergency response readiness [DR-2]
+    "Public Library": 1.0,                      ## Non-critical load; full battery available (ASSUMPTION)
+    "Public School Facility": 0.5,              ## Summer closure lowers load during summer SCR events, limiting the measured baseline [DR-1] (ASSUMPTION)
+    "Community Center": 1.0,                    ## Non-critical load; full battery available (ASSUMPTION)
+    "Water Treatment Plant": 0.5,               ## Critical infrastructure; half of battery reserved for backup [DR-3] (ASSUMPTION)
+    "Wastewater Treatment Plant": 0.5,          ## Critical infrastructure; essential process loads limit shed [DR-3] (ASSUMPTION)
+    "Public Works Facility": 1.0,               ## Non-critical daytime load; full battery available (ASSUMPTION)
+    "Smart Street Lighting System": 0.0,        ## Nighttime load, not coincident with summer afternoon SCR events
+    "Traffic Signal Network": 0.0,              ## Zero curtailment permitted for public safety
+    "Emergency Operations Center (EOC)": 0.0,   ## Mission-critical; battery reserved for backup [DR-2]
 }
 
 # =====================================================================
@@ -353,17 +360,67 @@ if enable_battery:
         format_func=lambda x: f"{x}-Hour Setup (Battery Peak Shaving Focus)" if x == 2 else f"{x}-Hour Setup (Emergency Reserves Focus)"
     )
 
+# Section 3: Interconnection Strategy (continued)
 enable_net_metering = st.sidebar.checkbox("Enable Net Energy Metering (NEM)", value=False)
-enable_peak_shaving = st.sidebar.checkbox("Enable Battery Peak Shaving", value=False)
-enable_demand_response = st.sidebar.checkbox("Enable NYISO DR Market VPP", value=False)
-enable_islanding = st.sidebar.checkbox("Enable Microgrid Islanding (Backup for Grid Outages) ", value=False)
+# [FIX S1] Peak shaving needs a demand charge; lighting tariffs (PSC No. 214) have none
+shaving_excluded = not FACILITY_PROFILES[facility_selection].get("demand_charge")
+shaving_disabled = (not enable_battery) or shaving_excluded
+dr_disabled = not enable_battery
+# [FIX UI1] Clear a stored tick before a checkbox is drawn disabled, so a greyed-out box never shows as ticked
+if shaving_disabled:
+    st.session_state["cb_peak_shaving"] = False
+if dr_disabled:
+    st.session_state["cb_demand_response"] = False
+# [FIX UI2] Hover help explains why an option is greyed out
+enable_peak_shaving = st.sidebar.checkbox(
+    "Enable Battery Peak Shaving",
+    key="cb_peak_shaving",
+    disabled=shaving_disabled,
+    help=("Unavailable: this facility's tariff has no demand charge." if shaving_excluded
+          else "Requires battery storage. Check 'Deploy Battery Storage (BESS)' to enable." if not enable_battery
+          else "Uses the battery to lower the facility's monthly peak demand charge.")
+)
+enable_demand_response = st.sidebar.checkbox(
+    "Enable NYISO DR Market VPP",
+    key="cb_demand_response",
+    disabled=dr_disabled,
+    help=("Requires battery storage. Check 'Deploy Battery Storage (BESS)' to enable." if dr_disabled
+          else "Enrolls battery capacity in the NYISO Special Case Resources (SCR) program.")
+)
+# [FIX B6] A disabled checkbox keeps its last value, so battery-dependent options are forced off without a battery
+enable_peak_shaving = enable_peak_shaving and enable_battery and not shaving_excluded
+if shaving_excluded:
+    st.sidebar.caption("Peak shaving unavailable: this facility's tariff has no demand charge.")
+enable_demand_response = enable_demand_response and enable_battery
+
+# Islanding disabled for unmetered facility types where base_kw = 0
+islanding_excluded = FACILITY_PROFILES[facility_selection]["base_kw"] == 0
+
+if islanding_excluded:  # [FIX UI1]
+    st.session_state["cb_islanding"] = False
+enable_islanding = st.sidebar.checkbox(
+    "Enable Microgrid Islanding (Backup for Grid Outages)",
+    key="cb_islanding",
+    disabled=islanding_excluded,
+    help="Models backup power duration during a grid outage. Requires battery storage."  # [FIX UI2]
+)
+
+if islanding_excluded:
+    st.sidebar.caption(
+        "Islanding unavailable for this facility type. "
+        "Unmetered accounts have no defined critical load baseline."
+    )
+elif enable_islanding and not enable_battery:  # [FIX UI3]
+    st.sidebar.caption("Backup duration requires battery storage. Check 'Deploy Battery Storage (BESS)' to model it.")
 
 # Section 4: Submit Button
 st.sidebar.markdown("---")
-submit_button = st.sidebar.button(
-    label="🚀 Run Techno-Economic Evaluation",
-    use_container_width=True
-)
+# [FIX L7] After the first run, sidebar changes update results automatically; the button then reads "Update"
+run_label = "🔄 Update Evaluation" if st.session_state.simulation_active else "🚀 Run Techno-Economic Evaluation"
+try:
+    submit_button = st.sidebar.button(label=run_label, width="stretch")  # [FIX M4] Streamlit 1.46+
+except TypeError:
+    submit_button = st.sidebar.button(label=run_label, use_container_width=True)  # older Streamlit
 
 # Initiating String validation immediately the user clicks submit button
 
@@ -385,37 +442,48 @@ if not is_valid_zip and clean_zip and not submit_button:
 # =====================================================================
 # 3. DYNAMIC GEOLOCATION ENGINE
 # =====================================================================
+class GeocodeError(Exception):
+    """[FIX M1] Raised for network or service errors, so a temporary failure is not cached for an hour."""
+
+
 @st.cache_data(ttl=3600)
 def get_coordinates_from_zip(zipcode):
-    geo_url = f"https://nominatim.openstreetmap.org/search?postalcode={zipcode}&country=United States&format=json&addressdetails=1"
-    headers = {"User-Agent": "TE3_Energy_Evaluation_App_v1.0"}
+    geo_url = "https://nominatim.openstreetmap.org/search"
+    params = {"postalcode": zipcode, "country": "United States", "format": "json", "addressdetails": 1}
+    # [FIX L5] Nominatim usage policy asks for an identifying User-Agent with a contact
+    headers = {"User-Agent": "TE3-Engine/1.0 (municipal energy screening tool; https://github.com/Olumide-Akindipe)"}
     try:
-        geo_response = requests.get(geo_url, headers=headers, timeout=10)
-        if geo_response.status_code == 200 and geo_response.json():
-            location_data = geo_response.json()[0]
-            address_block = location_data.get("address", {})
-            location_name = (
-                address_block.get("city") or 
-                address_block.get("town") or 
-                address_block.get("village") or 
-                address_block.get("hamlet") or 
-                address_block.get("municipality") or 
-                address_block.get("county") or 
-                f"Region {zipcode}"
-            )
-            state = address_block.get("state") or address_block.get("state_code") or ""
-            display_name = f"{location_name}, {state}".strip(", ")
-            return {
-                "lat": float(location_data["lat"]),
-                "lon": float(location_data["lon"]),
-                "display_name": display_name
-            }
-    except Exception as e:
-        st.sidebar.error(f"Geocoding Engine Latency: {str(e)}")
-    return None
+        geo_response = requests.get(geo_url, params=params, headers=headers, timeout=10)
+    except requests.RequestException as e:
+        raise GeocodeError(f"the location service could not be reached ({type(e).__name__})") from None
+    if geo_response.status_code != 200:
+        raise GeocodeError(f"the location service returned HTTP {geo_response.status_code}")
+    results = geo_response.json()
+    if results:
+        location_data = results[0]
+        address_block = location_data.get("address", {})
+        location_name = (
+            address_block.get("city") or 
+            address_block.get("town") or 
+            address_block.get("village") or 
+            address_block.get("hamlet") or 
+            address_block.get("municipality") or 
+            address_block.get("county") or 
+            f"Region {zipcode}"
+        )
+        state = address_block.get("state") or address_block.get("state_code") or ""
+        display_name = f"{location_name}, {state}".strip(", ")
+        return {
+            "lat": float(location_data["lat"]),
+            "lon": float(location_data["lon"]),
+            "display_name": display_name,
+            "state": state,  # [FIX B1]
+            "state_code": address_block.get("ISO3166-2-lvl4", "")
+        }
+    return None  # ZIP code not found (safe to cache)
 
 # =====================================================================
-# 4. TECHNO-ECONOMIC MATH MATRIX (OPTION B ACTIVE)
+# 4. TECHNO-ECONOMIC MODEL
 # =====================================================================
 def run_techno_economic_modeling(sun_hours, system_kw, facility_type, battery_active, duration, net_metering_active, shaving_active, dr_active, islanding_active):
     # 🟢 sun_hours extracted from the integrated API dataset is already an annualized resource vector.
@@ -426,7 +494,7 @@ def run_techno_economic_modeling(sun_hours, system_kw, facility_type, battery_ac
     annual_demand_kwh = FACILITY_PROFILES[facility_type]["demand"]
     grid_displacement_percentage = min((annual_generation_kwh / annual_demand_kwh) * 100, 100.0)
     
-    # OPTION B: EXTRACT THE ASSET-SPECIFIC NATIONAL GRID RATE BASELINE WITH RESPECT TO THE FACILITY PROFILE
+    # Average commercial rate for the facility (facility_profiles.py)
     active_rate = FACILITY_PROFILES[facility_type]["rate"]
     
     base_savings = min(annual_generation_kwh, annual_demand_kwh) * active_rate
@@ -435,12 +503,22 @@ def run_techno_economic_modeling(sun_hours, system_kw, facility_type, battery_ac
     
     shaving_savings = 0.0
     if battery_active and shaving_active:
-        shaving_savings = (system_kw * 0.40) * 12.00 * 12 
+        shaved_kw = min(system_kw * 0.40, FACILITY_PROFILES[facility_type]["base_kw"])  # [FIX A1] cap at facility peak demand
+        if FACILITY_PROFILES[facility_type].get("tariff_class") == "large_commercial":
+            # [FIX L3] SC-3 Secondary bills the first 40 kW as a fixed block; only kW above 40 is avoided per kW
+            shaved_kw = min(shaved_kw, max(0.0, FACILITY_PROFILES[facility_type]["base_kw"] - SC3_FIXED_BLOCK_KW))
+        # [FIX R2] Tariff delivery demand charge ($/kW-month) replaces the unsourced $12.00
+        shaving_savings = shaved_kw * (FACILITY_PROFILES[facility_type].get("demand_charge") or 0.0) * 12 
         
     dr_revenue = 0.0
     dr_load_reduction_kw = 0.0
     if battery_active and dr_active:
-        dr_load_reduction_kw = system_kw * DR_DISPATCH_FACTORS.get(facility_type, 0.0)
+        # [FIX DR] Enrolled kW = battery kW x dispatch factor x 4-hour sustainability, capped at facility peak demand
+        scr_duration_factor = min(duration / SCR_MIN_DURATION_HOURS, 1.0)
+        dr_load_reduction_kw = min(
+            system_kw * DR_DISPATCH_FACTORS.get(facility_type, 0.0) * scr_duration_factor,
+            FACILITY_PROFILES[facility_type]["base_kw"],
+        )
         dr_revenue = dr_load_reduction_kw * DR_CAPACITY_RATE
 
     optimized_annual_savings = base_savings + net_metering_revenue + shaving_savings + dr_revenue
@@ -449,18 +527,28 @@ def run_techno_economic_modeling(sun_hours, system_kw, facility_type, battery_ac
     base_capex = system_kw * 2500
     if battery_active:
         base_capex += (system_kw * (600 if duration == 2 else 950))
-    if islanding_active:
+    if islanding_active and battery_active:  # [FIX A3] islanding hardware cost applies only with storage
         base_capex *= 1.15 
         
     net_capex = base_capex * 0.70 
-    payback_years = net_capex / optimized_annual_savings if optimized_annual_savings > 0 else 0
+    payback_years = net_capex / optimized_annual_savings if optimized_annual_savings > 0 else None  # [FIX B2] None = no payback
     
-    autonomy_hours = 0.0
-    if islanding_active:
+    autonomy_hours= 0.0
+    if islanding_active and battery_active:  # [FIX A3] grid-tied solar alone cannot island; backup requires storage
         battery_capacity_kwh = system_kw * duration if battery_active else 0.0
-        avg_hourly_demand = FACILITY_PROFILES[facility_type]["base_kw"]
+        base_kw = FACILITY_PROFILES[facility_type]["base_kw"]
+        annual_demand_kwh = FACILITY_PROFILES[facility_type]["demand"]
         daily_sun_hours = sun_hours / 365
-        autonomy_hours = (battery_capacity_kwh / avg_hourly_demand) + ((system_kw * daily_sun_hours * 0.5) / avg_hourly_demand)
+
+        if base_kw > 0:
+            avg_hourly_demand = base_kw
+        elif annual_demand_kwh > 0:
+            avg_hourly_demand = annual_demand_kwh / 8760
+        else:
+            avg_hourly_demand = 0.0
+
+        if avg_hourly_demand > 0:
+            autonomy_hours = (battery_capacity_kwh / avg_hourly_demand) + ((system_kw * daily_sun_hours * 0.5) / avg_hourly_demand)
         
     return {
         "generation": round(annual_generation_kwh, 1),
@@ -473,7 +561,7 @@ def run_techno_economic_modeling(sun_hours, system_kw, facility_type, battery_ac
         "dr_revenue": round(dr_revenue, 2),
         "dr_load_reduction": round(dr_load_reduction_kw, 1),
         "capex": round(net_capex, 2),
-        "payback": round(payback_years, 1),
+        "payback": round(payback_years, 1) if payback_years is not None else None,
         "excess": round(excess_generation, 1),
         "gross_capex": round(base_capex, 2),
         "ira_credit": round(base_capex * 0.30, 2),
@@ -481,420 +569,568 @@ def run_techno_economic_modeling(sun_hours, system_kw, facility_type, battery_ac
     }
 
 # =====================================================================
-# 5. ENTERPRISE PDF COMPILER (WITH TECHNICAL REFERENCE GLOSSARY)
+# 5. PDF REPORT (PRE-FEASIBILITY SCREENING REPORT)
 # =====================================================================
+# [FIX PDF] Report revised for Version 1 release (te3-release-plan-and-pdf-review.md, P1 to P43):
+# key results on page 1, facility load and cost breakdown shown, plain terminology, methods stated as the code
+# computes them, data vintages, screening notes, Unicode-safe text, fpdf2 new_x/new_y (M4).
+TE3_VERSION = "1.0"
+REPORT_NAVY = (31, 58, 86)
+REPORT_AMBER = (230, 150, 30)
+REPORT_BORDER = (203, 213, 225)
+REPORT_TEXT = (40, 40, 40)
+REPORT_MUTED = (110, 110, 110)
+
+# Characters outside Latin-1 cannot be drawn with the built-in Helvetica font [FIX P43]
+_PDF_CHAR_MAP = {"–": "-", "—": "-", "‘": "'", "’": "'", "“": '"', "”": '"',
+                 "•": "-", "…": "...", "×": "x", "≤": "<=", "≥": ">=", "→": "->"}
+
+
+def pdf_safe(text):
+    text = "".join(_PDF_CHAR_MAP.get(ch, ch) for ch in str(text))
+    return text.encode("latin-1", "replace").decode("latin-1")
+
+
+def fmt_money(value):
+    return f"${value:,.2f}"
+
+
 class BrandedExecutivePDF(FPDF):
+    def normalize_text(self, text):
+        return super().normalize_text(pdf_safe(text))  # [FIX P43]
+
     def header(self):
-        # Generates a visual 8mm solid navy blue decorative accent stripe down the left margin boundary
-        self.set_fill_color(31, 58, 86) 
+        # Navy accent stripe down the left margin
+        self.set_fill_color(*REPORT_NAVY)
         self.rect(0, 0, 8, 297, "F")
         self.set_left_margin(15)
         self.set_font("Helvetica", "I", 8)
-        self.set_text_color(120, 120, 120)
-        self.cell(0, 5, "TE3 Infrastructure Portfolio Matrix | Comprehensive Capital Evaluation", ln=True, align="R")
-        self.set_text_color(0, 0, 0) 
-        
+        self.set_text_color(*REPORT_MUTED)
+        self.cell(0, 5, "TE3 Engine | Pre-Feasibility Screening Report", align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.set_text_color(0, 0, 0)
+
     def footer(self):
-        # Repositions cursor 15mm up from bottom edge
         self.set_y(-15)
         self.set_font("Helvetica", "I", 8)
         self.set_text_color(150, 150, 150)
-        self.cell(0, 10, f"Page {self.page_no()} | Vetted via Federal Climate Architecture Baselines (NREL NSRDB)", align="C")
-
-def generate_comprehensive_pdf(zipcode, city, sun_hours, capacity, facility, battery, duration, net_meter, shaving, dr, island, results, dr_dispatch_factor=0.0, dr_capacity_rate=20.00):
-    pdf = BrandedExecutivePDF()
-    current_asset_rate = FACILITY_PROFILES[facility]["rate"]
-    
-    # --- PAGE 1: EXECUTIVE DASHBOARD SUMMARY & CONTEXT BRIEF ---
-    pdf.add_page()
-    pdf.set_left_margin(15)
-    pdf.ln(5)
-    pdf.set_font("Helvetica", "B", 18)
-    pdf.set_text_color(31, 58, 86) 
-    pdf.cell(0, 12, "TECHNO-ECONOMIC INVESTMENT REPORT", ln=True)
-    pdf.ln(1)
-    pdf.set_draw_color(230, 150, 30) # Branded Orange Accent Divider Line
-    pdf.set_line_width(0.8)
-    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
-    pdf.ln(6)
-    
-    # EXECUTIVE NARRATIVE SUMMARY (THE USE CASE STORY)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(31, 58, 86)
-    pdf.cell(0, 6, "Executive Summary", ln=True)
-    pdf.ln(1)
-    pdf.set_font("Helvetica", "", 9.5)
-    pdf.set_text_color(50, 50, 50)
-    preamble_story = (
-        f"Municipalities in the United States are facing infrastructure challenges due to rising energy costs and increased vulnerability to grid disruptions. In order to protect critical infrastructure and ensure continuity of public services, local governments are exploring the integration of distributed energy resources (DERs) such as solar photovoltaic (PV) systems and battery energy storage systems (BESS). These technologies provide a pathway to reduce electricity costs but also enhance resilience against power outages and grid instability.\n\n"
-        f"This model evaluates the potential benefits of deploying a solar PV system, with optional battery storage, at a municipal facility in {city} (ZIP: {zipcode})."
-        f"By integrating solar generation and distributed energy systems into the municipal portfolio, the system addresses both economic and resilience challenges."
-        f"First, it reduces electricity expenses by generating on-site power and strategically managing energy use during peak demand periods."
-        f"Second, it enhances resilience by providing backup power capabilities during grid outages, ensuring that critical municipal functions can continue uninterrupted.\n\n"
-        f"This analysis translates complex energy modeling outputs into financial and operational insights for municipal decision-makers, quantifying projected cost savings, grid independence, and return on investment timelines. "
-        f"By leveraging solar resource data and current utility rate structures, this report provides a comprehensive assessment of the financial and operational impacts of the proposed energy system,"
-        f"empowering informed infrastructure investment decisions and long-term cost savings that align with sustainability goals and community resilience objectives."
-    )
-    pdf.multi_cell(0, 5, preamble_story)
+        self.cell(0, 10, f"Page {self.page_no()} | Solar resource: NSRDB via PVWatts v8 (National Laboratory of the Rockies)", align="C")
 
 
-    # =====================================================================
-    # --- PAGE 2: INFRASTRUCTURE CONTEXT & PORTFOLIO BASELINE MATRIX ---
-    # =====================================================================
-    pdf.add_page() 
-    pdf.ln(5)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(31, 58, 86)
-    pdf.cell(0, 6, "1. Project context & Geographic Infrastructure Baseline", ln=True)
+def _section_title(pdf, text):
     pdf.ln(2)
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(*REPORT_NAVY)
+    pdf.cell(0, 7, text, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.ln(1)
 
-    # -- TABLE 1: RESTRUCTURED INFRASTRUCTURE CORE MATRIX --
-    pdf.set_fill_color(240, 244, 248)
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.cell(85, 6, "Configuration Parameter", border=1, fill=True)
-    pdf.cell(95, 6, "Model Baseline State (Vetted Portfolio Constraints)", border=1, fill=True, ln=True)
 
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(40, 40, 40)
-    pdf.cell(85, 6, "  Target Geography Profile", border=1)
-    pdf.cell(95, 6, f"  {city} ({zipcode})", border=1, ln=True)
+def _table_header(pdf, widths, labels):
+    pdf.set_font("Helvetica", "B", 8.5)
+    pdf.set_fill_color(*REPORT_NAVY)
+    pdf.set_text_color(255, 255, 255)
+    for i, label in enumerate(labels):
+        last = i == len(labels) - 1
+        pdf.cell(widths[i], 6.5, f" {label}", border=1, fill=True,
+                 new_x=XPos.LMARGIN if last else XPos.RIGHT, new_y=YPos.NEXT if last else YPos.TOP)
 
-    pdf.cell(85, 6, "  Solar Resource Irradiance", border=1)
-    pdf.cell(95, 6, f"  {round(sun_hours / 365, 2) if sun_hours else 0} Peak Sun Hours / Day Average (NREL NSRDB)", border=1, ln=True)
 
-    pdf.cell(85, 6, "  Selected Asset Classification", border=1)
-    pdf.cell(95, 6, f"  {facility}", border=1, ln=True)
-
-    pdf.cell(85, 6, "  Asset Structural Parameters", border=1)
-    asset_notes = FACILITY_PROFILES[facility]['desc_technical']
-    clean_notes = asset_notes if len(asset_notes) < 55 else asset_notes[:52] + "..."
-    pdf.cell(95, 6, f"  {clean_notes}", border=1, ln=True)
-
-    pdf.cell(85, 6, "  National Grid Electric Tariff Class", border=1)
-    pdf.cell(95, 6, f"  Blended Utility Rate: ${current_asset_rate:.2f} / kWh Baseline", border=1, ln=True)
-
-    pdf.cell(85, 6, "  Proposed HW Generation Capacity", border=1)
-    pdf.cell(95, 6, f"  {capacity} kW Photovoltaic (PV) Array", border=1, ln=True)
-
-    pdf.cell(85, 6, "  Net Energy Metering (NEM) Interconnection", border=1)
-    pdf.cell(95, 6, f"  {'ACTIVE / RETAIL RATE NEM CREDITED' if net_meter else 'INACTIVE / VOLUMETRIC METERS ONLY'}", border=1, ln=True)
-
-    pdf.cell(85, 6, "  Energy Storage Hardware (BESS)", border=1)
-    pdf.cell(95, 6, f"  {f'Active {duration}-Hour Setup' if battery else 'Not Deployed'} ", border=1, ln=True)
-
-    pdf.cell(85, 6, "  Peak Demand Shaving Dispatch", border=1)
-    pdf.cell(95, 6, f"  {'ENABLED (SC-3 Tariff Management Mode)' if shaving else 'DISABLED'}", border=1, ln=True)
-
-    pdf.cell(85, 6, "  NYISO DR Market Participation / VPP", border=1)
-    pdf.cell(95, 6, f"  {'ENROLLED - $' + str(dr_capacity_rate) + '/kW/yr SCR Rate | ' + str(int(dr_dispatch_factor * 100)) + '% Dispatch Factor' if dr else 'EXCLUDED / RETAIL ONLY'} ", border=1, ln=True)
-
-    pdf.cell(85, 6, "  Microgrid Islanding Automation Switch", border=1)
-    if island:
-        autonomy_hours = results.get('autonomy', duration * 2 if battery else 0)
-        islanding_status = f"OPERATIONAL | {autonomy_hours} hrs backup | 50% Critical Load Isolation Mode)"
-    else:
-        islanding_status = "NON-OPERATIONAL"
-    pdf.cell(95, 6, f"  {islanding_status}", border=1, ln=True)
-    
-    # =====================================================================
-    # --- PAGE 3: TECHNO-ECONOMIC SAVINGS & FINANCIAL INVESTMENT OUTCOMES ---
-    # =====================================================================
-    pdf.add_page()
-    pdf.ln(5)
-    pdf.set_font("Helvetica", "B", 11)
-    pdf.set_text_color(31, 58, 86)
-    pdf.cell(0, 6, "2. Techno-Economic Energy Outcomes", ln=True)
-    pdf.ln(2)
-    
-    # -- TABLE 2: PROJECTED FINANCIAL VECTORS --
-    pdf.set_fill_color(240, 244, 248)
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.cell(85, 6, "  Performance Metric Indicators", border=1, fill=True)
-    pdf.cell(95, 6, "  Projected Financial Value", border=1, fill=True, ln=True)
-
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(40, 40, 40)
-    pdf.cell(85, 6, "  Projected Annual Generation", border=1)
-    pdf.cell(95, 6, f"  {results['generation']:,} kWh / Year", border=1, ln=True)
-
-    pdf.cell(85, 6, "  Grid Energy Demand Offset", border=1)
-    pdf.cell(95, 6, f"  {results['displacement']}% Grid Avoidance", border=1, ln=True)
-
-    pdf.cell(85, 6, "  Direct Volumetric Solar Co-Generation Avoidance Savings", border=1)
-    pdf.cell(95, 6, f"  ${results['base_savings']:,} / Year Nominal Base Load", border=1, ln=True)
-
-    pdf.cell(85, 6, "  Peak Demand BESS Shaving Adjustments", border=1)
-    pdf.cell(95, 6, f"  ${results['shaving_savings']:,.2f} / Year Utility Avoidance", border=1, ln=True)
-
-    if net_meter:
-        nem_val = results.get('nem_revenue', 0)
-        pdf.cell(85, 6, "  Net Energy Metering (NEM) Revenue Credit", border=1)
-        pdf.cell(95, 6, f"  ${nem_val:,.2f} / Year Credited Stacks", border=1, ln=True)
-
-        pdf.cell(85, 6, "  Excess Solar Generation Exported to Grid", border=1)
-        pdf.cell(95, 6, f"  {results['excess']:,.0f} kWh / Year Net Export Volume", border=1, ln=True)
-
-    if dr:
-        dr_val = results.get('dr_revenue', 0)
-        dr_load = results.get('dr_load_reduction', 0)
-        pdf.cell(85, 6, "  NYISO DR Market VPP Revenue", border=1)
-        pdf.cell(95, 6, f"  ${dr_val:,} / Year | {dr_load} kW Dispatched", border=1, ln=True)
-    
-    # Strategic Capital Highlight Sub-Table
-    pdf.set_fill_color(254, 247, 234) 
-    pdf.set_font("Helvetica", "B", 9)
-    pdf.set_text_color(180, 90, 0)
-
-    pdf.cell(85, 7, "  TOTAL ANNUAL ENERGY COST SAVINGS", border=1, fill=True)
-    pdf.cell(95, 7, f"  ${results['savings']:,} / Year Post-Optimization", border=1, fill=True, ln=True)
-
-    pdf.cell(85, 7, "  ESTIMATED NET INITIAL SETUP INVESTMENT (CapEx)", border=1, fill=True)
-    pdf.cell(95, 7, f"  ${results.get('capex', 0):,} (Post-IRA 30% Investment Tax Credit)", border=1, fill=True, ln=True)
-
-    pdf.cell(85, 7, "  SIMPLE PAYBACK PERIOD", border=1, fill=True)
-    pdf.cell(95, 7, f"  {results['payback']} Nominal Calendar Years", border=1, fill=True, ln=True)
-    
-    if island and results.get('autonomy', 0) > 0:
-        pdf.cell(85, 7, "  BACKUP POWER DURATION (Grid Outage Runtime)", border=1, fill=True)
-        pdf.cell(95, 7, f"  {results['autonomy']} Hours Sustained Autonomous Runtime", border=1, fill=True, ln=True)
-
+def _table_rows(pdf, widths, rows, emphasis_from=None, font_size=8.5):
+    """Rows of text cells. Each row's height fits its longest cell, so no text is cut off."""
+    line_h = 4.2
+    for idx, row in enumerate(rows):
+        bold = emphasis_from is not None and idx >= emphasis_from
+        pdf.set_font("Helvetica", "B" if bold else "", font_size)
+        n_lines = max(len(pdf.multi_cell(widths[i], line_h, f" {cell}", align="L", dry_run=True, output="LINES"))
+                      for i, cell in enumerate(row))
+        row_h = max(6.5, n_lines * line_h + 2.2)
+        if pdf.get_y() + row_h > pdf.page_break_trigger:
+            pdf.add_page()
+        if bold:
+            pdf.set_fill_color(254, 247, 234)
+            pdf.set_text_color(150, 75, 0)
+        else:
+            pdf.set_fill_color(*((248, 250, 252) if idx % 2 else (255, 255, 255)))
+            pdf.set_text_color(*REPORT_TEXT)
+        x0, y0 = pdf.get_x(), pdf.get_y()
+        for i, cell in enumerate(row):
+            pdf.set_xy(x0 + sum(widths[:i]), y0)
+            pdf.cell(widths[i], row_h, "", border=1, fill=True)
+            pdf.set_xy(x0 + sum(widths[:i]), y0 + 1.1)
+            pdf.multi_cell(widths[i], line_h, f" {cell}", align="L")
+        pdf.set_xy(x0, y0 + row_h)
     pdf.set_text_color(0, 0, 0)
 
-    # Fallback content block when optional modules are inactive
-    inactive_modules = []
-    if not net_meter:
-        inactive_modules.append("Net Energy Metering (NEM) - enables retaiil-rate export credits for excess solar generation")
-    if not dr:
-        inactive_modules.append("NYISO Demand Response (DR) - enables participation in NYISO's demand response via the Special Case Resources (SCR) program")
-    if not island:
-        inactive_modules.append("Microgrid Islanding - enables backup power capabilities during grid outages through automated transfer switch configurations")
-    if not battery:
-        inactive_modules.append("Battery Energy Storage System (BESS) - enables energy storage for peak shaving and demand response participation")
 
-    if inactive_modules:
-        pdf.ln(6)
-        pdf.set_fill_color(245, 245, 250)
-        pdf.set_font("Helvetica", "B", 9)
-        pdf.set_text_color(31, 58, 86)
-        pdf.multi_cell(0, 4.5, f"Note: The following optional modules were not activated in this configuration, which may impact the total projected savings and operational capabilities: {', '.join(inactive_modules)}. For a more comprehensive analysis, consider enabling these features to capture their full financial and resilience benefits.")
-        pdf.set_font("Helvetica", "", 8.5)
-        pdf.set_text_color(60, 60, 60)
-        pdf.ln(2)
-        for module in inactive_modules:
-            pdf.cell(5, 4.5, "- ", border=0)
-            pdf.cell(0, 5, f" - {module}", ln=True)
-        pdf.ln(3)
-        pdf.set_font("Helvetica", "I", 8)
-        pdf.set_text_color(120, 120, 120)
-        pdf.multi_cell(0, 4.5,
-            "To activate these modules, return to the TE3 sidebar and enable the corresponding "
-            "interconnection features. Each module adds incremental financial value to the total "
-            "annual savings projection and expands the scope of this investment analysis. This report is based on modeled projections using current utility rates and solar resource data. Actual performance and savings may vary based on real-world conditions, system performance, and market dynamics."
-        )
+def _paragraph(pdf, text, size=9.5, style="", color=REPORT_TEXT, line_h=5):
+    pdf.set_font("Helvetica", style, size)
+    pdf.set_text_color(*color)
+    pdf.multi_cell(0, line_h, text, align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-    # --- PAGE 4: APPLIED REGULATORY, GLOSSARY AND METHODOLOGY FRAMEWORK ---
+
+def build_screening_notes(sun_hours, capacity, facility, battery, duration, net_meter, shaving, dr, island,
+                          results, dr_dispatch_factor):
+    """[FIX NOTES] Rule-based screening notes derived from this configuration's own results.
+    They state facts and options; they are not design recommendations."""
+    profile = FACILITY_PROFILES[facility]
+    demand = profile["demand"]
+    generation = results["generation"]
+    notes = []
+
+    # Array size relative to annual use
+    if generation > demand:
+        match_kw = max(10, int(round(capacity * demand / generation / 10.0)) * 10)
+        surplus_pct = (generation / demand - 1) * 100
+        if net_meter:
+            notes.append(f"Solar output exceeds the facility's annual use by {surplus_pct:.0f}%. The surplus is credited at the "
+                         f"average commercial rate in this model; under New York VDER rules export value may be lower. "
+                         f"An array of about {match_kw} kW would match annual use.")
+        else:
+            notes.append(f"Solar output exceeds the facility's annual use by {surplus_pct:.0f}%, and the surplus earns no credit "
+                         f"because net metering is not selected. An array of about {match_kw} kW would match annual use, "
+                         f"or enable net metering to value the surplus.")
+    elif results["displacement"] < 50:
+        match_kw = int(round(capacity * demand / max(generation, 1) / 10.0)) * 10
+        size_note = (f"About {match_kw} kW would match annual use" if match_kw <= 500
+                     else "Matching annual use would need more than the 500 kW modeled range")
+        notes.append(f"Solar meets {results['displacement']:.1f}% of annual use. {size_note}, subject to roof or ground area "
+                     f"and interconnection limits.")
+
+    # Battery value
+    demand_charge = profile.get("demand_charge") or 0.0
+    if not battery and demand_charge > 0:
+        notes.append(f"This facility's tariff ({profile['tariff']}) has a demand charge of ${demand_charge:.2f}/kW-month. "
+                     f"Peak shaving and NYISO demand response require battery storage and are not included in these results.")
+    if battery:
+        no_battery = run_techno_economic_modeling(sun_hours, capacity, facility, False, duration, net_meter,
+                                                  False, False, False)
+        added_capex = results["capex"] - no_battery["capex"]
+        added_value = results["savings"] - no_battery["savings"]
+        if no_battery["payback"] is not None:
+            notes.append(f"Without the battery, net CapEx would be {fmt_money(no_battery['capex'])} and simple payback "
+                         f"{no_battery['payback']} years. The battery adds {fmt_money(added_capex)} of net CapEx and "
+                         f"{fmt_money(added_value)} per year in modeled value.")
+        if demand_charge == 0:
+            notes.append("This facility's tariff has no demand charge, so the battery's value here is backup power only.")
+        if dr and dr_dispatch_factor == 0:
+            notes.append("NYISO demand response was selected, but this facility type keeps its battery in reserve for backup "
+                         "power during grid emergencies, so no capacity is enrolled.")
+        elif dr and duration == 2 and results["dr_load_reduction"] < profile["base_kw"]:
+            notes.append("NYISO counts only the power a battery can sustain for 4 hours. A 4-hour battery would roughly "
+                         "double the enrolled capacity, up to the facility peak.")
+
+    if island and not battery:
+        notes.append("Islanding was selected without battery storage, so backup duration is not modeled.")
+
+    if facility in ("Smart Street Lighting System",):
+        notes.append("Street lighting operates at night. Savings assume solar output is credited against the lighting "
+                     "account over the year, which depends on a remote crediting arrangement with the utility.")
+
+    notes.append(ITC_TIMING_NOTE)  # [FIX ITC] shown on every run
+    quality = profile.get("data_quality", "benchmark")
+    if quality != "benchmark":
+        notes.append(f"The facility load is a {('low quality' if quality == 'low' else 'provisional')} benchmark. "
+                     f"Confirm annual use and peak demand with 12 months of utility bills before design.")
+    else:
+        notes.append("The facility load is a national benchmark for this building type. Confirm annual use and peak "
+                     "demand with 12 months of utility bills before design.")
+    return notes
+
+
+def generate_comprehensive_pdf(zipcode, city, sun_hours, capacity, facility, battery, duration, net_meter, shaving, dr,
+                               island, results, dr_dispatch_factor=0.0, dr_capacity_rate=20.00):
+    profile = FACILITY_PROFILES[facility]
+    rate = profile["rate"]
+    tariff = profile["tariff"]
+    demand_charge = profile.get("demand_charge") or 0.0
+    report_date = datetime.date.today().strftime("%B %d, %Y")
+    backup_modeled = island and battery and results.get("autonomy", 0) > 0
+    widths2 = [80, 100]
+
+    pdf = BrandedExecutivePDF()
+    pdf.set_title(f"TE3 Pre-Feasibility Screening Report - {facility} - {zipcode}")  # [FIX P42]
+    pdf.set_author("TE3 Engine")
+    pdf.set_auto_page_break(auto=True, margin=18)
+
+    # ---------------- PAGE 1: title, key results, summary, screening notes ----------------
     pdf.add_page()
     pdf.ln(3)
-    pdf.set_font("Helvetica", "B", 13)
-    pdf.set_text_color(31, 58, 86)
-    pdf.cell(0, 8, "3. Technical Glossary & Regulatory Framework Definitions", ln=True)
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(*REPORT_NAVY)
+    pdf.cell(0, 10, "Solar and Storage Pre-Feasibility Screening Report", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_draw_color(*REPORT_AMBER)
+    pdf.set_line_width(0.8)
+    pdf.line(15, pdf.get_y() + 1, 195, pdf.get_y() + 1)
+    pdf.set_draw_color(*REPORT_BORDER)  # [FIX P36] reset so tables get thin neutral borders
+    pdf.set_line_width(0.2)
+    pdf.ln(4)
+    _paragraph(pdf, f"{facility}  |  {city} (ZIP {zipcode})  |  {report_date}  |  Version {TE3_VERSION}",
+               size=9, color=REPORT_MUTED)
     pdf.ln(2)
 
-    current_asset_rate = current_asset_rate if 'current_asset_rate' in locals() else 0.184
-    facility = facility if 'facility' in locals() else "Municipal Office Building"
-    
-    glossary_data = [
-        ("Total Annual Energy Cost Savings", "Total combined value offset (Value Stacking). The complete financial benefit generated by solar on-site generation, demand management, and grid export incentives."),
-        ("Grid Energy Offset (Retail Rate)", f"The specific variable cost bypassed by on-site generation. Factored at a blended delivery/supply rate of ${current_asset_rate:.2f}/kWh for the evaluated {facility} asset template."),
-        ("Battery Peak Shaving", "Using BESS hardware capacity to dispatch during critical coincidental peak utility windows to artificially trim seasonal demand surcharges under commercial delivery classes."),
-        ("Net Energy Metering (NEM)", "Interconnection rules allowing multi-asset generation exports. Under New York VDER rules, exports are calculated based on hourly unbundled value stack variables."),
-        ("NYISO Demand Response Market", "Enrolling storage capacity in the Special Case Resources (SCR) program for capacity reservations. Modeled at a conservative upstate NY base clearing price of $20.00/kW/year. Excludes lighting/signals."),
-        ("DR Dispatchable Capacity Factor", "The assumed portion of system capacity available for grid curtailment. Office and schools hold 25%; water/wastewater assets hold 10% due to processing baselines. Signals and lights hold 0%."),
-        ("NYISO Capacity Accreditation (CAF)", "The performance discount applied by the ISO to storage based on real-world duration. Accommodated directly within the compressed $20.00/kW/year modeling assumption threshold."),
-        ("Backup Power Duration (Islanding)", "Emergency load-shedding isolation mode runtime. Assumes smart automated transfer switches slice standard non-critical circuit demands by 50%, doubling standard discharge envelopes."),
-        ("NREL NSRDB Infrastructure", "National Renewable Energy Laboratory Solar Resource Database. Feeds high-fidelity historical solar irradiance metrics into the localization mapping engine."),
-        ("System Performance Adjustment", "Integrated baseline coefficient computing real-world thermal losses, inverter drop-offs, and wiring friction. Forces a flat 14% performance penalty per IEC 61724-1."),
-        ("Battery Lifecycle Assumptions", "Sized around Lithium Iron Phosphate (LFP) chemistries, setting standard operational threshold profiles optimized to maintain active state-of-health curves over time."),
-        ("Model Assumptions & Limitations", "Projections represent weather-normalized engineering baselines. Actual field results will fluctuate under variable weather pattern dynamics and real-world grid anomalies.")
-    ]
-    
-    # TWO-COLUMN COMPACT GLOSSARY PATTERN WITH PAGINATION MONITOR
-    pdf.set_font("Helvetica", "", 7.5)
-    col_w = 88
-    space_between_cols = 4
-    col_left_x = 15
-    col_right_x = col_left_x + col_w + space_between_cols
-    
-    for idx, (title, definition) in enumerate(glossary_data):
-        # MANUAL PAGINATION TRIPWIRE: If cursor hits 250mm, add clean page break
-        if pdf.get_y() > 250:
-            pdf.add_page()
-            pdf.ln(10)
-            
-        is_even = (idx % 2 == 0)
-        curr_x = col_left_x if is_even else col_right_x
-        
-        pdf.set_x(curr_x)
-        
-        # Term Header
-        pdf.set_font("Helvetica", "B", 8)
-        pdf.set_text_color(31, 58, 86)
-        pdf.cell(col_w, 4, f">> {title}:", ln=True)
-        pdf.set_x(curr_x)
-        
-        # Definition Body
+    # Key results box [FIX P1]
+    tiles = [("Annual savings", f"{fmt_money(results['savings'])} / year"),
+             ("Net capital cost (after 30% ITC*)", fmt_money(results["capex"])),
+             ("Simple payback", f"{results['payback']} years" if results["payback"] is not None else "N/A (no savings)"),
+             ("Annual solar generation", f"{results['generation']:,.0f} kWh"),
+             ("Share of annual use met by solar", f"{results['displacement']}%"),
+             ("Backup duration (screening estimate)", f"{results['autonomy']} hours" if backup_modeled else "Not modeled")]
+    box_w, box_h = 60, 17
+    y_start = pdf.get_y()
+    for i, (label, value) in enumerate(tiles):
+        x = 15 + (i % 3) * box_w
+        y = y_start + (i // 3) * box_h
+        pdf.set_fill_color(240, 244, 248)
+        pdf.rect(x, y, box_w - 2, box_h - 2, "F")
+        pdf.set_xy(x + 2, y + 2)
         pdf.set_font("Helvetica", "", 7.5)
-        pdf.set_text_color(50, 50, 50)
-        pdf.multi_cell(col_w, 3.5, definition)
-        
-        if not is_even:
-            pdf.ln(2.5)
+        pdf.set_text_color(*REPORT_MUTED)
+        pdf.cell(box_w - 6, 4, label)
+        pdf.set_xy(x + 2, y + 7)
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.set_text_color(*REPORT_NAVY)
+        pdf.cell(box_w - 6, 6, value)
+    pdf.set_xy(15, y_start + 2 * box_h + 1)
 
+    _section_title(pdf, "Summary")
+    sources = ["solar energy used on site"]
+    if net_meter and results.get("nem_revenue", 0) > 0:
+        sources.append("export credits")
+    if shaving and results.get("shaving_savings", 0) > 0:
+        sources.append("lower demand charges")
+    if dr and results.get("dr_revenue", 0) > 0:
+        sources.append("NYISO demand response payments")
+    savings_sources = sources[0] if len(sources) == 1 else ", ".join(sources[:-1]) + " and " + sources[-1]
+    resilience = ("With battery storage and islanding, the system can also supply part of the facility's load during a grid "
+                  "outage; the backup duration above is a screening estimate. "
+                  if backup_modeled else "")
+    summary = (
+        "Municipalities face rising energy costs and greater exposure to grid disruptions. Solar photovoltaic (PV) systems, "
+        "with optional battery energy storage (BESS), can lower electricity costs and, where storage is included, support "
+        "critical services during outages.\n\n"
+        f"This report screens a {capacity} kW solar array"
+        f"{f' with a {duration}-hour battery' if battery else ''} at a {facility.lower()} in {city} (ZIP {zipcode}). "
+        f"Savings come from {savings_sources}. "
+        f"{resilience}"
+        "Results use national building benchmarks, typical-year solar data and current New York utility rates. They are "
+        "screening estimates intended to decide whether a detailed study is warranted, not a design or an investment-grade "
+        "analysis. Confirm facility use with 12 months of utility bills before design."  # [FIX P2, P15, P18]
+    )
+    _paragraph(pdf, summary)
 
-    # =========================================================================
-    # COMPLIANCE & AUDIT METHODOLOGY FOOTPRINT (TECHNICAL APPENDIX GENERATION)
-    # =========================================================================
-    pdf.add_page()
-    pdf.ln(5)
-    
-    # Section Header
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.set_text_color(31, 58, 86)
-    pdf.cell(0, 10, "4. Technical Methodology & Audit Framework Equations", ln=True)
-    pdf.ln(2)
-    
-    pdf.set_font("Helvetica", "", 9.5)
-    pdf.set_text_color(80, 80, 80)
-    pdf.multi_cell(0, 5, "This section outlines the mathematical core verification formulas and verified federal data benchmarks utilized to compute the performance metrics and financial vectors displayed within this brief.")
-    pdf.ln(5)
-
-    def print_audit_formula(title_text, formula_text):
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.set_text_color(31, 58, 86)
-        pdf.cell(0, 5, title_text, ln=True)
+    _section_title(pdf, "Screening Notes")
+    notes = build_screening_notes(sun_hours, capacity, facility, battery, duration, net_meter, shaving, dr, island,
+                                  results, dr_dispatch_factor)
+    for note in notes:
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*REPORT_TEXT)
+        pdf.multi_cell(0, 4.8, f"-  {note}", align="L", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.ln(1)
-        
-        pdf.set_fill_color(248, 250, 252) 
-        pdf.set_text_color(15, 23, 42)    
-        pdf.set_font("Courier", "B", 10)
-        pdf.cell(0, 8, f"   {formula_text}", border=1, ln=True, fill=True)
-        pdf.ln(2)
 
-    print_audit_formula("1. Solar Photovoltaic Generation Model", "E_annual = P_dc x H_sun x n_system")
-    print_audit_formula("2. Grid Energy Demand Offset Model", "D_offset = Min( (E_annual / L_facility) * 100, 100% )")
-    print_audit_formula("3. Financial OpEx Mitigation Model", "S_annual = E_annual x R_tariff")
-    print_audit_formula("4. Simple Investment Payback Vector", "P_years = C_capital / S_annual")
-    print_audit_formula("5. Microgrid Islanding (Backup Power Duration)", "T_backup = (C_bess / (L_critical x 0.50)) x F_solar")
+    # ---------------- PAGE 2: configuration and results ----------------
+    pdf.add_page()
+    _section_title(pdf, "1. Project Configuration")
+    if dr and dr_dispatch_factor == 0:
+        dr_text = "Not eligible (battery reserved for backup)"  # [FIX P12]
+    elif dr:
+        dr_text = f"Included: ${dr_capacity_rate:,.2f}/kW-year; {int(dr_dispatch_factor * 100)}% of battery power offered"
+    else:
+        dr_text = "Not included"
+    if island and not battery:
+        island_text = "Selected; not modeled (requires battery storage)"
+    elif island:
+        island_text = "Modeled (see backup duration)"
+    else:
+        island_text = "Not included"
+    config_rows = [
+        ["Location", f"{city} (ZIP {zipcode})"],
+        ["Facility type", facility],
+        ["Solar resource", f"{round(sun_hours / 365, 2) if sun_hours else 0} peak sun hours per day (NSRDB via PVWatts)"],
+        ["Utility tariff (National Grid)", f"{tariff}; average commercial rate ${rate:.4f}/kWh"],
+        ["Demand charge", f"${demand_charge:.2f}/kW-month" if demand_charge else "None (lighting tariff)"],
+        ["Solar capacity", f"{capacity} kW DC"],
+        ["Battery storage", f"{capacity} kW, {duration} hours ({capacity * duration} kWh)" if battery else "Not included"],
+        ["Net energy metering", "Included (exports credited at the average commercial rate)" if net_meter
+                                 else "Not included (exports not credited)"],
+        ["Peak shaving", f"Included ({tariff} demand charge)" if shaving else "Not included"],
+        ["NYISO demand response (SCR)", dr_text],
+        ["Microgrid islanding", island_text],
+    ]
+    _table_header(pdf, widths2, ["Setting", "Value"])
+    _table_rows(pdf, widths2, config_rows)
+
+    _section_title(pdf, "2. Results")
+    result_rows = [
+        ["Facility annual electricity use (benchmark)", f"{profile['demand']:,} kWh / year (data quality: {profile.get('data_quality', 'benchmark')})"],
+        ["Facility peak demand (estimated)", f"{profile['base_kw']} kW" if profile["base_kw"] else "None billed (lighting tariff)"],
+        ["Annual solar generation", f"{results['generation']:,.1f} kWh / year"],
+        ["Share of annual use met by solar", f"{results['displacement']}%"],
+        ["Energy cost savings (on-site use)", f"{fmt_money(results['base_savings'])} / year"],
+        ["Peak shaving savings", f"{fmt_money(results['shaving_savings'])} / year" if shaving
+                                 else ("Not available (no demand charge)" if demand_charge == 0 else "Not included")],
+    ]
+    if net_meter:
+        result_rows += [["Net metering export credit", f"{fmt_money(results['nem_revenue'])} / year"],
+                        ["Solar exported to the grid", f"{results['excess']:,.0f} kWh / year"]]
+    if dr and dr_dispatch_factor == 0:
+        result_rows.append(["NYISO demand response revenue", "Not eligible (battery reserved for backup)"])
+    elif dr:
+        result_rows.append(["NYISO demand response revenue",
+                            f"{fmt_money(results['dr_revenue'])} / year ({results['dr_load_reduction']:,.1f} kW enrolled)"])
+    result_rows += [
+        ["Gross capital cost", fmt_money(results["gross_capex"])],  # [FIX P5]
+        ["Federal ITC (30%)*", f"- {fmt_money(results['ira_credit'])}"],
+    ]
+    emphasis_start = len(result_rows)
+    result_rows += [
+        ["Total annual savings", f"{fmt_money(results['savings'])} / year"],
+        ["Net capital cost", fmt_money(results["capex"])],
+        ["Simple payback", f"{results['payback']} years" if results["payback"] is not None else "N/A (no annual savings)"],
+    ]
+    if backup_modeled:
+        result_rows.append(["Backup duration (screening estimate)", f"{results['autonomy']} hours"])
+    _table_header(pdf, widths2, ["Metric", "Value"])
+    _table_rows(pdf, widths2, result_rows, emphasis_from=emphasis_start)
+
+    pdf.ln(1.5)
+    footnotes = ["* Assumes eligibility for the 30% federal Investment Tax Credit (elective pay for public entities). "
+                 "Under the 2025 federal tax law (OBBBA), solar projects must begin construction by July 4, 2026 or be "
+                 "placed in service by December 31, 2027."]
+    if island and not battery:
+        footnotes.append("Islanding was selected without battery storage: backup duration and the islanding cost premium "
+                         "are not included.")  # [FIX P13]
+    for fn in footnotes:
+        _paragraph(pdf, fn, size=7.5, style="I", color=REPORT_MUTED, line_h=4)
+
+    # Options not selected that would apply to this facility [FIX P14]
+    options = []
+    if not net_meter:
+        options.append("Net energy metering: credits solar output above the facility's use.")
+    battery_uses = []
+    if demand_charge > 0:
+        battery_uses.append("peak shaving")
+    if DR_DISPATCH_FACTORS.get(facility, 0) > 0:
+        battery_uses.append("demand response")
+    if profile["base_kw"] > 0:
+        battery_uses.append("backup modeling")
+    if not battery and battery_uses:
+        uses = battery_uses[0] if len(battery_uses) == 1 else ", ".join(battery_uses[:-1]) + " and " + battery_uses[-1]
+        options.append(f"Battery storage: enables {uses} for this facility type.")
+    if battery and not shaving and demand_charge > 0:
+        options.append("Peak shaving: lowers the monthly demand charge.")
+    if battery and not dr and DR_DISPATCH_FACTORS.get(facility, 0) > 0:
+        options.append("NYISO demand response: capacity payments for enrolled battery power.")
+    if not island and profile["base_kw"] > 0:
+        options.append("Microgrid islanding: models backup duration (requires battery storage; adds 15% to capital cost).")
+    if options:
+        pdf.ln(2)
+        _paragraph(pdf, "Options not included in this configuration (each may change savings, cost or resilience):",
+                   size=8.5, style="B", color=REPORT_NAVY, line_h=4.5)
+        for opt in options:
+            _paragraph(pdf, f"-  {opt}", size=8.5, line_h=4.5)
+
+    # ---------------- PAGE 3: glossary and assumptions ----------------
+    pdf.add_page()
+    _section_title(pdf, "3. Glossary and Assumptions")
+    glossary = [
+        ("Total annual savings", "Sum of energy cost savings, net metering credit, peak shaving savings and demand response "
+                                 "revenue for the configuration selected."),
+        ("Energy cost savings", f"Solar energy used on site, up to the facility's annual use, valued at ${rate:.4f}/kWh: "
+                                "National Grid (Niagara Mohawk) average commercial price, U.S. EIA Form EIA-861, 2024. "
+                                "This average includes demand charges, so for demand-metered accounts (SC-2 Demand, SC-3) "
+                                "the per-kWh value of solar may be lower."),
+        ("Peak shaving", "Battery discharge during the facility's highest-demand periods to lower the monthly demand charge "
+                         "(SC-2 Demand $18.93/kW-month; SC-3 Secondary $15.62/kW-month above the first 40 kW). The model "
+                         "shaves up to 40% of battery power, capped at the facility peak, for all 12 months. Monthly peaks "
+                         "outside summer are lower, so this is an upper estimate. Not available on lighting tariffs."),
+        ("Net energy metering", "Credits solar output above the facility's annual use at the average commercial rate. Under "
+                                "New York VDER rules, many non-residential projects are compensated through the Value Stack, "
+                                "which values exports by time and location and may be lower."),
+        ("NYISO demand response", f"Battery capacity enrolled in the NYISO Special Case Resources (SCR) program, valued at "
+                                  f"${dr_capacity_rate:,.2f}/kW-year. This is the low end of recent NYCA capacity prices "
+                                  "after the 74.17% SCR capacity accreditation factor (NYISO, 2026-27, Rest of State)."),
+        ("Demand response dispatch factor", "Share of battery power offered to the SCR program after reserving backup "
+                                            "capacity: 100% for offices, libraries, community centers and public works; 50% "
+                                            "for schools and water and wastewater plants; 0% for police, fire, EOC, street "
+                                            "lighting and traffic signals. Enrolled kW is also limited to what the battery "
+                                            "can sustain for the 4-hour SCR obligation and to the facility peak."),
+        ("Backup duration", "Screening estimate: battery energy divided by the facility's estimated peak demand, plus half "
+                            "of one average day's solar output divided by the same peak. Using the peak as a continuous "
+                            "load is conservative; the solar term assumes typical sun during the outage. A critical-load "
+                            "method is planned for Version 1.1."),  # [FIX H3 wording]
+        ("System losses", "Solar output is reduced by 14%, the PVWatts default system losses (soiling, wiring, mismatch, "
+                          "availability). Module temperature and inverter efficiency effects are not yet applied; this "
+                          "is planned for Version 1.1."),
+        ("Federal ITC", "30% Investment Tax Credit applied to the full capital cost, assuming eligibility. Public entities "
+                        "may claim it through elective pay. Confirm eligibility and the OBBBA deadlines with a tax advisor."),
+        ("Model assumptions", "Battery power (kW) equals solar capacity; battery energy is power times the selected hours. "
+                              "The same battery is credited for peak shaving and demand response. Capital costs are "
+                              "planning assumptions ($2,500/kW solar; $600/kW for a 2-hour and $950/kW for a 4-hour "
+                              "battery; 15% islanding premium) pending sourced benchmarks in Version 1.1. Battery "
+                              "degradation, replacement, operations and maintenance, financing and rate escalation are not "
+                              "modeled."),  # [FIX M3, P10, P11, P28]
+        ("Accuracy", "Facility loads are national benchmarks (CBECS 2018) with an expected range of about plus or minus 30 "
+                     "to 40% for an individual building. Results are suitable for screening, not for design or procurement."),
+    ]
+    for term, definition in glossary:
+        if pdf.get_y() > 255:
+            pdf.add_page()
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_text_color(*REPORT_NAVY)
+        pdf.cell(0, 5, term, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        _paragraph(pdf, definition, size=8.5, line_h=4.3)
+        pdf.ln(1.5)
+
+    # ---------------- PAGE 4: methods and sources ----------------
+    pdf.add_page()
+    _section_title(pdf, "4. Methods and Data Sources")
+    _paragraph(pdf, "Formulas as computed by TE3 Engine Version 1. Symbols are defined in the table that follows.",
+               size=9, color=REPORT_MUTED)
+    pdf.ln(1)
+    formulas = [
+        ("Solar generation", "E_annual = P_dc x H_sun x 0.86"),
+        ("Share of use met", "D_offset = Min(E_annual / L_facility, 1) x 100%"),
+        ("Energy cost savings", "S_energy = Min(E_annual, L_facility) x R_tariff"),
+        ("Net metering credit", "S_nem = Max(E_annual - L_facility, 0) x R_tariff"),
+        ("Peak shaving", "S_shave = Min(P_bess x 0.40, L_peak) x R_demand x 12  (a)"),
+        ("DR enrolled capacity", "K_dr = Min(P_bess x F_dispatch x Min(D_bess / 4, 1), L_peak)"),
+        ("DR revenue", "S_dr = K_dr x R_dr"),
+        ("Gross capital cost", "C_gross = (P_dc x 2,500 + P_bess x c_bess) x 1.15  (b)"),
+        ("Net capital cost", "C_net = C_gross x (1 - 0.30)"),
+        ("Simple payback", "P_years = C_net / (S_energy + S_nem + S_shave + S_dr)"),
+        ("Backup duration", "T_backup = C_bess / L_peak + (P_dc x H_day x 0.5) / L_peak"),
+    ]
+    for label, formula in formulas:
+        pdf.set_font("Helvetica", "B", 8.5)
+        pdf.set_text_color(*REPORT_NAVY)
+        pdf.cell(36, 6.2, label)
+        pdf.set_font("Courier", "B", 8)
+        pdf.set_text_color(15, 23, 42)
+        pdf.set_fill_color(248, 250, 252)
+        pdf.cell(144, 6.2, f" {formula}", border=1, fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.ln(0.8)
+    _paragraph(pdf, "(a) For SC-3, only kW above the first 40 kW is valued.  (b) The 1.15 islanding premium applies only "
+                    "when islanding is modeled with a battery; P_bess and c_bess are zero without a battery.",
+               size=7.5, style="I", color=REPORT_MUTED, line_h=4)
     pdf.ln(2)
 
-    # Render 4-Column Audit Matrix Table with Embedded Standard URLs
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.set_text_color(31, 58, 86)
-    pdf.cell(0, 5, "Variable Matrix & Data Source Dictionary:", ln=True)
-    pdf.ln(3)
-
-    col_widths = [22, 16, 92, 60] 
-    
+    col_widths = [20, 16, 86, 58]
     pdf.set_font("Helvetica", "B", 8.5)
+    pdf.set_fill_color(*REPORT_NAVY)
     pdf.set_text_color(255, 255, 255)
-    pdf.set_fill_color(31, 58, 86) 
-    
-    headers = ["Term", "Unit", "Description (One-Line Audit Definition)", "Source Standard / Authority Link"]
-    for i, header in enumerate(headers):
-        pdf.cell(col_widths[i], 7, header, border=1, ln=(i == len(headers)-1), fill=True)
+    for i, header in enumerate(["Symbol", "Unit", "Description", "Source"]):
+        last = i == 3
+        pdf.cell(col_widths[i], 6.5, f" {header}", border=1, fill=True,
+                 new_x=XPos.LMARGIN if last else XPos.RIGHT, new_y=YPos.NEXT if last else YPos.TOP)
 
     audit_records = [
-        ("E_annual", "kWh/yr", "Projected Annual Generation: Total calculated electrical output.", "NREL NSRDB Database Portal", "https://nsrdb.nrel.gov/"),
-        ("P_dc", "kW", "Proposed Solar Capacity: The physical DC power ceiling layout size.", "User Specified Input", ""),
-        ("H_sun", "hrs/yr", "Annual Peak Sun Hours: Localized solar irradiance metric mapped to ZIP.", "NREL Resource Profiles", "https://nsrdb.nrel.gov/"),
-        ("n_system", "%", "System Efficiency Factor: Performance coefficient forcing a 14% system loss.", "IEC 61724-1 Standard", ""),
-        ("D_offset", "%", "Grid Energy Demand Offset: Total percentage tracking net grid avoidance.", "Calculated Output Metric", ""),
-        ("L_facility", "kWh/yr", "Annual Facility Load: Baseline electricity draw hardcoded to asset class.", "EIA CBECS Survey Library", "https://www.eia.gov/consumption/commercial/"),
-        ("L_critical", "kW", "Critical Facility Demand: Continuous load capacity needed during isolation.", "EPA Portfolio Manager Explorer", "https://www.energystar.gov/buildings/benchmark"),
-        ("S_annual", "$/yr", "Estimated Annual Savings: Gross operational budget baseline utility savings.", "Calculated Energy Output", ""),
-        ("R_tariff", "$/kWh", "Blended Utility Rate: Estimated regional utility power pricing applied to asset.", "National Grid Tariff PSC 220", "https://www.nationalgridus.com/Upstate-NY-Business/Rates/Tariff-Provisions"),
-        ("P_years", "Years", "Simple Payback Period: Baseline amortization tracking net asset recovery speed.", "Calculated Financial Output", ""),
-        ("C_capital", "$", "Net Capital Cost: Total estimated fiscal deployment footprint calculations.", "Calculated CapEx Output", ""),
-        ("T_backup", "Hours", "Microgrid Islanding: Total hours the facility remains active during an outage.", "Calculated Resilience Output", ""),
-        ("C_bess", "kWh", "Battery Energy Capacity: Total storage volume of hardware setup.", "User Sizing Input Layer", ""),
-        ("F_solar", "Coeff.", "Solar Replenishment Factor: Dynamic daytime battery charging coefficient.", "NYSERDA Infrastructure Profiles", "https://www.nyserda.ny.gov/")
+        ("E_annual", "kWh/yr", "Annual solar generation", "PVWatts v8 (NLR)", "https://developer.nlr.gov/docs/solar/pvwatts/v8/"),
+        ("P_dc", "kW", "Solar array rating (DC)", "User input", ""),
+        ("H_sun", "h/yr", "Annual peak sun hours at the location (H_day per day)", "NLR NSRDB", "https://nsrdb.nlr.gov/"),
+        ("L_facility", "kWh/yr", "Facility annual use (benchmark)", "TE3 TRM; CBECS 2018", "https://www.eia.gov/consumption/commercial/data/2018/"),
+        ("L_peak", "kW", "Facility peak demand (annual use / (8,760 x load factor))", "TE3 TRM; UFC 3-501-03N", ""),
+        ("R_tariff", "$/kWh", "Average commercial rate", "EIA-861 2024, Table 7", "https://www.eia.gov/electricity/sales_revenue_price/pdf/table_7.pdf"),
+        ("R_demand", "$/kW-mo", "Tariff demand charge", "National Grid Service Rates", "https://www.nationalgridus.com/Upstate-NY-Business/Rates/Service-Rates"),
+        ("P_bess", "kW", "Battery power (equal to P_dc)", "Model assumption", ""),
+        ("D_bess", "h", "Battery duration (2 or 4)", "User input", ""),
+        ("C_bess", "kWh", "Battery energy (P_bess x D_bess)", "Calculated", ""),
+        ("c_bess", "$/kW", "Battery cost ($600 for 2 h; $950 for 4 h)", "Model assumption", ""),
+        ("F_dispatch", "share", "DR dispatch factor by facility type", "NYISO DR Resources", "https://www.nyiso.com/documents/20142/3037451/9-Demand-Response.pdf/3d224420-5b44-a282-5cc9-c082f497d112"),
+        ("K_dr", "kW", "DR enrolled capacity", "NYISO SCR rules", "https://www.nyiso.com/documents/20142/30712914/Demand-Response-Special-Case-Resources.pdf"),
+        ("R_dr", "$/kW-yr", "DR capacity value", "NYISO 2026-27 CAF", "https://www.nyiso.com/documents/20142/41593818/Final-Capacity-Accreditation-Factors-for-the-2026-2027-capability-year.pdf/83685470-882d-66d2-e6d8-68ed4d449e44"),
+        ("C_gross", "$", "Capital cost before the ITC", "Model assumption", ""),
+        ("C_net", "$", "Capital cost after the 30% ITC", "IRS section 48E", "https://www.irs.gov/credits-deductions/clean-electricity-investment-credit"),
+        ("T_backup", "h", "Backup duration (screening estimate)", "Calculated", ""),
     ]
-
-    pdf.set_font("Helvetica", "", 7.5)
-    pdf.set_text_color(50, 50, 50)
-    fill_row = False
-
-    for term, unit, desc, source_text, url in audit_records:
-        if fill_row:
-            pdf.set_fill_color(248, 250, 252) 
-        else:
-            pdf.set_fill_color(255, 255, 255) 
-            
-        row_h = 10.0 if len(desc) > 80 else 6.5
-        
-        x_start = pdf.get_x()
-        y_start = pdf.get_y()
-        
+    pdf.set_text_color(*REPORT_TEXT)
+    for idx, (term, unit, desc, source_text, url) in enumerate(audit_records):
+        pdf.set_fill_color(*((248, 250, 252) if idx % 2 else (255, 255, 255)))
+        pdf.set_font("Helvetica", "", 7.8)
+        n_lines = len(pdf.multi_cell(col_widths[2], 3.6, f" {desc}", align="L", dry_run=True, output="LINES"))
+        row_h = max(6.0, n_lines * 3.6 + 1.6)
+        if pdf.get_y() + row_h > pdf.page_break_trigger:
+            pdf.add_page()
+        x0, y0 = pdf.get_x(), pdf.get_y()
         pdf.cell(col_widths[0], row_h, f" {term}", border=1, fill=True)
         pdf.cell(col_widths[1], row_h, f" {unit}", border=1, fill=True)
-        
-        pdf.set_xy(x_start + col_widths[0] + col_widths[1], y_start)
-        pdf.multi_cell(col_widths[2], row_h / 2 if row_h == 10.0 else row_h, f" {desc}", border=1, fill=True)
-        
-        pdf.set_xy(x_start + col_widths[0] + col_widths[1] + col_widths[2], y_start)
-        
-        # IF TARGET URL IS DETECTED, APPLY INTERACTIVE LINK STYLING
+        pdf.cell(col_widths[2], row_h, "", border=1, fill=True)
+        pdf.set_xy(x0 + col_widths[0] + col_widths[1], y0 + 0.8)
+        pdf.multi_cell(col_widths[2], 3.6, f" {desc}", align="L")
+        pdf.set_xy(x0 + col_widths[0] + col_widths[1] + col_widths[2], y0)
         if url:
-            pdf.set_text_color(31, 100, 180) # Hyperlink Blue
-            pdf.set_font("Helvetica", "U", 7.5) # 'U' enables the text underline asset style
-            pdf.cell(col_widths[3], row_h, f" {source_text}", border=1, ln=True, fill=True, link=url)
-            pdf.set_text_color(50, 50, 50)
-            pdf.set_font("Helvetica", "", 7.5)
+            pdf.set_text_color(31, 100, 180)
+            pdf.set_font("Helvetica", "U", 7.8)
+            pdf.cell(col_widths[3], row_h, f" {source_text}", border=1, fill=True, link=url,
+                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.set_text_color(*REPORT_TEXT)
         else:
-            pdf.cell(col_widths[3], row_h, f" {source_text}", border=1, ln=True, fill=True)
-            
-        fill_row = not fill_row 
+            pdf.cell(col_widths[3], row_h, f" {source_text}", border=1, fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    pdf.ln(3)
+    _paragraph(pdf, "Data vintages: CBECS 2018 (facility benchmarks); EIA-861 2024 (energy rate); National Grid PSC No. 220 "
+                    "service rates and 2026 class load shapes; NYISO 2026-27 capacity accreditation; PVWatts v8 with NSRDB "
+                    "typical-year data. Full source register: TE3 Technical Reference Manual.",  # [FIX P3]
+               size=7.5, style="I", color=REPORT_MUTED, line_h=4)
 
     return pdf.output()
 
+# =====================================================================
+# 6. CACHED API CALLS
+# =====================================================================
+class SolarDataError(Exception):
+    """[FIX H1] Raised instead of returning None, so failures are not cached and the API key is never displayed."""
 
-# =====================================================================
-# 6. CACHED API CONNECTION HOOKS (BYPASSES SIDEBAR LATENCY)
-# =====================================================================
-@st.cache_data(ttl=3600, show_spinner="Querying federal solar irradiance matrix...")
+
+@st.cache_data(ttl=3600, show_spinner="Retrieving solar resource data...")
 def fetch_solar_resource_data(lat, lon, api_key):
-    # 🟢 FIXED: Corrected domain spelling to developer.nlr.gov
-    url = f"https://developer.nlr.gov/api/pvwatts/v8.json?api_key={NREL_API_KEY}&lat={lat}&lon={lon}&system_capacity=4&azimuth=180&tilt=20&array_type=1&module_type=0&losses=14"
+    params = {"api_key": api_key, "lat": lat, "lon": lon, "system_capacity": 4, "azimuth": 180,
+              "tilt": 20, "array_type": 1, "module_type": 0, "losses": 14}
     try:
-        res = requests.get(url, timeout=12)
-        if res.status_code == 200 and "outputs" in res.json():
-            # Return the single annualized solar production reference metric 
-            return res.json()["outputs"].get("solrad_annual")
-    except Exception as e:
-        pass
-    return None
+        res = requests.get("https://developer.nlr.gov/api/pvwatts/v8.json", params=params, timeout=12)
+    except requests.RequestException as e:
+        raise SolarDataError(f"the service could not be reached ({type(e).__name__})") from None
+    if res.status_code != 200:
+        raise SolarDataError(f"the service returned HTTP {res.status_code}")
+    value = (res.json().get("outputs") or {}).get("solrad_annual")
+    if value is None:
+        raise SolarDataError("the response contained no solar resource value")
+    return value
 
 
 # =====================================================================
-# 7. EXECUTION PIPELINE (PROD-READY & ALIGNMENT BALANCED)
+# 7. EXECUTION PIPELINE
 # =====================================================================
 if st.session_state.simulation_active and is_valid_zip:
-    with st.spinner("🌍 Connecting to geospatial servers..."):
-        geo_results = get_coordinates_from_zip(clean_zip)
+    geo_error = None
+    with st.spinner("🌍 Locating ZIP code..."):
+        try:
+            geo_results = get_coordinates_from_zip(clean_zip)
+        except GeocodeError as e:  # [FIX M1]
+            geo_results = None
+            geo_error = str(e)
         
     if geo_results:
         lat, lon, city_label = geo_results["lat"], geo_results["lon"], geo_results["display_name"]
+
+        # [FIX B1] Current release supports New York State only (National Grid, NYISO and NY net metering assumptions)
+        if not (geo_results.get("state_code") == "US-NY" or geo_results.get("state") == "New York"):
+            st.warning(f"ZIP code {clean_zip} is outside New York State. This version of TE3 supports New York State ZIP codes only. National coverage is planned for a future release.")
+            st.stop()
         
         st.markdown(f"""
             <div class="location-badge">
-                📍 <b>Target Location:</b> {city_label} (Zip Code: {clean_zip})
+                📍 <b>Target Location:</b> {html.escape(city_label)} (ZIP Code: {clean_zip})
             </div>
         """, unsafe_allow_html=True)
 
         # 1. Pull data utilizing the optimized, cached network function hook pointed to nlr.gov
-        daily_solrad_value = fetch_solar_resource_data(lat, lon, NREL_API_KEY)
+        solar_error = ""
+        try:
+            daily_solrad_value = fetch_solar_resource_data(lat, lon, NREL_API_KEY)
+        except SolarDataError as e:  # [FIX H1]
+            daily_solrad_value = None
+            solar_error = str(e)
 
-        # 2. SAFE VARIABLE INITIALIZATION (Completely prevents down-funnel NameErrors)
+        # 2. Convert daily solar resource to annual peak sun hours
         annual_sun_hours = None
 
         if daily_solrad_value is not None:
@@ -903,11 +1139,10 @@ if st.session_state.simulation_active and is_valid_zip:
 
         else:
             # Graceful interface alert if developer.nlr.gov experiences latency
-            st.error("❌ Data Parsing Error: The proxy service at developer.nlr.gov returned empty solar data attributes.")
+            st.error(f"❌ Solar resource data unavailable: {solar_error}. Please try again in a few minutes.")
         
-        # 3. SAFE VARIABLE FALLBACK CHECK (Protects widget configuration name changes)
-        # Ensures that whatever your sidebar slider variable is named, it maps cleanly here
-        final_capacity = locals().get('system_capacity_kw', locals().get('solar_capacity_kw', 50))
+        # 3. Solar capacity from the sidebar slider [FIX L2]
+        final_capacity = system_capacity_kw
 
         # 4. MODEL & LAYOUT RENDER BLOCK ---
         if annual_sun_hours is not None:
@@ -921,6 +1156,13 @@ if st.session_state.simulation_active and is_valid_zip:
             # KPI DASHBOARD REGION
             st.markdown("### 📊 Energy Outcomes")
 
+            # [FIX B2] Payback wording when the configuration produces no savings
+            payback_phrase = (
+                f"a calculated simple payback period of <b>{metrics['payback']} years</b>"
+                if metrics['payback'] is not None
+                else "<b>no simple payback</b>, because this configuration produces no annual savings"
+            )
+
             st.markdown(f"""
                 <div style="
                     background-color: #f0f4ff; 
@@ -933,7 +1175,7 @@ if st.session_state.simulation_active and is_valid_zip:
                     font-weight: 500;
                 ">
                     💡 <b>Executive Insight:</b> This simulated energy infrastructure configuration is projected to displace approximately
-                    <b>{metrics['displacement']}%</b> of the facility's annual electricity demand with a calculated simple payback period of <b>{metrics['payback']} years</b>.
+                    <b>{metrics['displacement']}%</b> of the facility's annual electricity demand with {payback_phrase}.
                 </div>
             """, unsafe_allow_html=True)
 
@@ -942,7 +1184,7 @@ if st.session_state.simulation_active and is_valid_zip:
                 st.metric(
                     label="Projected Annual Generation", 
                     value=f"{metrics['generation']:,} kWh/yr",
-                    help="### Projected Annual Generation\n\nThe total estimated electricity production from the proposed solar array over a 12-month period.\n\nCalculated using the NREL NSRDB solar resource model, accounting for localized peak sun hours and programmatically enforcing an IEC 61724-1 system de-rating coefficient of 14% to account for real-world environmental and thermal inefficiencies.\n\n*Applied Formula: Annual Generation = System Capacity (kW) * Average Peak Sun Hours * 0.86 (Efficiency Coefficient) * 365 Days.*"
+                    help="### Projected Annual Generation\n\nThe total estimated electricity production from the proposed solar array over a 12-month period.\n\nCalculated from the NLR NSRDB solar resource (via PVWatts), accounting for localized peak sun hours and applying the PVWatts default system losses of 14%. Module temperature and inverter efficiency effects are planned for Version 1.1.\n\n*Applied Formula: Annual Generation = System Capacity (kW) * Average Peak Sun Hours * 0.86 (Efficiency Coefficient) * 365 Days.*"
                 )
             with col2:
                 st.metric(
@@ -954,9 +1196,11 @@ if st.session_state.simulation_active and is_valid_zip:
             with col3:
                 st.metric(
                     label="Simple Payback Period", 
-                    value=f"{metrics['payback']} Years",
-                    help="### Simple Payback Period\n\nThe estimated number of years required for cumulative energy cost savings to fully recover the net capital investment in the solar array.\n\nFormula: Net System Cost (post 30% IRA Tax Credit) / Projected Annual Utility Savings, expressed in nominal dollars at current rate assumptions."
+                    value=f"{metrics['payback']} Years" if metrics['payback'] is not None else "N/A",
+                    help="### Simple Payback Period\n\nThe estimated number of years required for cumulative energy cost savings to fully recover the net capital investment in the solar array.\n\nFormula: Net System Cost (post 30% IRA Tax Credit) / Projected Annual Utility Savings, expressed in nominal dollars at current rate assumptions.\n\nAssumes eligibility for the 30% federal Investment Tax Credit. Under the 2025 federal tax law (OBBBA), solar projects must begin construction by July 4, 2026 or be placed in service by December 31, 2027."
                 )
+
+            st.info(f"⚖️ **Tax credit timing:** {ITC_TIMING_NOTE}")  # [FIX ITC]
 
             st.markdown("<br>", unsafe_allow_html=True)
             
@@ -966,8 +1210,8 @@ if st.session_state.simulation_active and is_valid_zip:
                 
                 st.metric(
                     label="Estimated Annual Savings", 
-                    value=f"${metrics['savings']:,} / yr",
-                    help="### ESTIMATED ANNUAL SAVINGS\n\nThe projected total reduction in annual utility expenditure resulting from on-site solar generation, battery peak shaving, and applicable grid incentive programs.\n\nExpressed in nominal dollars at current utility rate assumptions."
+                    value=f"${metrics['savings']:,.2f} / yr",
+                    help="### ESTIMATED ANNUAL SAVINGS\n\nThe projected total reduction in annual utility expenditure resulting from on-site solar generation, battery peak shaving, and applicable grid incentive programs.\n\nExpressed in nominal dollars at current utility rate assumptions.\n\nSavings are calculated on an annual net basis and assume solar generation is consumed on site. Systems that export significant midday generation will realize lower savings unless net metering is enabled."
                 )
                 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -979,17 +1223,17 @@ if st.session_state.simulation_active and is_valid_zip:
                         value=f"${metrics['shaving_savings']:,.2f}/yr",
                         delta="▲ Demand Charge Avoided",
                         delta_color="normal", 
-                        help="### BATTERY PEAK SHAVING\n\nThe financial value captured by deploying the Battery Energy Storage System (BESS) to suppress peak electricity demand (kW) during high-load periods.\n\nThis directly reduces the monthly demand charge baseline assessed by National Grid under commercial SC-2 and SC-3 tariff classifications."
+                        help="### BATTERY PEAK SHAVING\n\nThe financial value captured by deploying the Battery Energy Storage System (BESS) to suppress peak electricity demand (kW) during high-load periods.\n\nThis directly reduces the monthly delivery demand charge assessed by National Grid: $18.93 per kW under SC-2 Demand and $15.62 per kW (above the first 40 kW) under SC-3 Secondary (National Grid Upstate NY Service Rates, PSC No. 220). Street lighting and traffic signals are billed under PSC No. 214, which has no demand charge, so peak shaving does not apply."
                     )
                     
                 with sub_col2:
                     current_asset_rate = FACILITY_PROFILES[facility_selection]['rate']
                     st.metric(
-                        label="Blended Utility Rate", 
-                        value=f"${current_asset_rate:.2f}/kWh",
+                        label="Average Commercial Rate", 
+                        value=f"${current_asset_rate:.4f}/kWh",
                         delta="▲ Retail Avoidance",
                         delta_color="normal",
-                        help="### BLENDED UTILITY RATE\n\nThe dynamic blended electricity tariff applied to this simulation.\n\nAutomatically referenced from National Grid's 2026 Upstate New York pricing structures, accounting for whether the selected asset is billed under a standard volumetric commercial rate (SC-2 Non-Demand) or subject to primary distribution voltage demand charges (SC-3 Primary/Secondary)."
+                        help="### AVERAGE COMMERCIAL RATE\n\nThe average commercial electricity rate applied to this simulation.\n\nNational Grid (Niagara Mohawk) average commercial price of 10.43 cents/kWh, calculated as total commercial revenue divided by total commercial sales (U.S. EIA, Form EIA-861, 2024, Table 7). It includes supply, delivery and demand charges, and is applied to every facility type.\n\nLimitation: demand-metered accounts (SC-2 Demand, SC-3) pay delivery through per-kW demand charges, so the per-kWh value of solar for those accounts may be lower than this average. Battery peak shaving is valued separately at the tariff demand charge.\n\nRate source used in this run: " + str(FACILITY_PROFILES[facility_selection].get("rate_source", "EIA-861 2024"))  # [FIX L6]
                     )
 
                 # Introduce a NEM DisplaY Card if button is enabled
@@ -1002,7 +1246,7 @@ if st.session_state.simulation_active and is_valid_zip:
                                 value=f"${metrics['nem_revenue']:,.2f}/yr",
                                 delta="▲ Grid Export Credit",
                                 delta_color="normal",
-                                help="### NET ENERGY METERING (NEM) REVENUE CREDIT\n\nThe estimated annual financial credit generated by exporting excess solar generation back to the grid.\n\nUnder New York's net metering policy, electricity exported to the grid is credited at the facility's applied blended utility rate ($/kWh), directly offsetting future utility bills.\n\nCalculated as: Excess Generation (kWh) × Blended Utility Rate ($/kWh).\n\nNote: This model applies traditional retail-rate NEM compensation. Larger systems or community solar projects may qualify for New York's Value of Distributed Energy Resources (VDER) tariff, which assigns location and time-based value to exported energy."
+                                help="### NET ENERGY METERING (NEM) REVENUE CREDIT\n\nThe estimated annual financial credit generated by exporting excess solar generation back to the grid.\n\nUnder New York's net metering policy, electricity exported to the grid is credited at the average commercial rate ($/kWh), directly offsetting future utility bills.\n\nCalculated as: Excess Generation (kWh) × Average Commercial Rate ($/kWh).\n\nNote: This model applies traditional retail-rate NEM compensation. Larger systems or community solar projects may qualify for New York's Value of Distributed Energy Resources (VDER) tariff, which assigns location and time-based value to exported energy."
                             )
                         with nem_col2:
                             st.metric(
@@ -1024,15 +1268,15 @@ if st.session_state.simulation_active and is_valid_zip:
                             value=f"${metrics.get('dr_revenue', 0):,.2f}/yr",
                             delta="▲ DR Program Income",
                             delta_color="normal",
-                            help="### NYISO DEMAND RESPONSE (DR) MARKET REVENUE\n\nEstimated annual revenue from enrolling battery storage in NYISO's Special Case Resources (SCR) program.\n\nThis model applies a facility-specific dispatchable capacity factor and a conservative upstate New York SCR rate of $20/kW/year, consistent with 2026 NYISO capacity auction clearing prices for upstate zones (A–E).\n\nActual revenue varies by NYISO load zone, seasonal auction clearing prices, and facility performance during dispatch events.\n\nNote: Street lighting, traffic signals, and emergency operations centers are excluded from DR participation due to operational constraints.\n\nReference: NYISO April 2026 upstate UCAP clearing price — Modo Energy benchmark report."
+                            help="### NYISO DEMAND RESPONSE (DR) MARKET REVENUE\n\nEstimated annual revenue from enrolling battery storage in NYISO's Special Case Resources (SCR) program.\n\nThis model enrolls battery power using a facility-specific dispatch factor (the share of battery power not reserved for backup), limited to what the battery can sustain for NYISO's 4-hour SCR performance obligation and to the facility's peak demand. Enrolled capacity is valued at a conservative upstate New York SCR rate of $20/kW/year, at the low end of the range implied by recent NYCA capacity prices ($2 to $6.74/kW-month) after the 74% SCR capacity accreditation factor.\n\nActual revenue varies by NYISO load zone, seasonal auction clearing prices, and facility performance during dispatch events.\n\nNote: Street lighting, traffic signals, and emergency operations centers are excluded from DR participation due to operational constraints. Police and fire stations are also excluded, because their batteries are reserved for backup power during the grid emergencies when SCR events are called. Single facilities below NYISO's 100 kW minimum enroll through an aggregator (Responsible Interface Party).\n\nReferences: NYISO, Demand Response: Special Case Resources (program rules); NYCA capacity prices, Modo Energy (November 2025) and Rise Energy (May 2026), with the NYISO 2026-27 SCR capacity accreditation factor (rate)."
                         )
                     with dr_col2:
                         st.metric(
                             label="Estimated DR Load Reduction", 
-                            value=f"{metrics.get('dr_load_reduction', 0):,} kW",
+                            value=f"{metrics.get('dr_load_reduction', 0):,.1f} kW",
                             delta="▲ Grid Relief",
                             delta_color="normal",
-                            help="### ESTIMATED DR LOAD REDUCTION\n\nThe projected amount of load reduction (in kW) that the facility can achieve during demand response events through a combination of solar generation and battery discharge.\n\nThis reduction contributes to grid stability during peak demand periods and is a key factor in calculating potential DR market revenue."
+                            help="### ESTIMATED DR LOAD REDUCTION\n\nThe projected amount of load reduction (in kW) that the facility can achieve during demand response events through battery discharge. It is limited to the battery power the facility offers to the program, the power the battery can sustain for the 4-hour SCR obligation, and the facility's peak demand.\n\nThis reduction contributes to grid stability during peak demand periods and is a key factor in calculating potential DR market revenue."
                         )
                 
 
@@ -1068,7 +1312,9 @@ if st.session_state.simulation_active and is_valid_zip:
                         </div>
                     """, unsafe_allow_html=True)
 
-                if enable_islanding:
+                if enable_islanding and not enable_battery:  # [FIX A3]
+                    st.warning("🛡️ **Backup Power Duration:** Microgrid islanding requires battery storage. Enable BESS to model backup power duration.")  # [FIX UI3]
+                elif enable_islanding:
                     st.markdown(f"""
                         <div class="resilience-badge">
                             🛡️ <b>Backup Power Duration:</b> Microgrid islanding is active.  
@@ -1081,6 +1327,7 @@ if st.session_state.simulation_active and is_valid_zip:
                 st.markdown("### 📜 Generate Report")
                 st.write("View a detailed report to enhance your energy investment decision-making:")
                 
+            with st.spinner("Generating PDF report..."):
                 pdf_data = generate_comprehensive_pdf(
                     zipcode=clean_zip, 
                     city=city_label, 
@@ -1099,14 +1346,17 @@ if st.session_state.simulation_active and is_valid_zip:
                 )
                 
                 st.download_button(
-                    label="📥 Export Report (.pdf)",
+                    label="Download PDF",
                     data=bytes(pdf_data),
-                    file_name=f"TE3_Feasibility_Report_{clean_zip}.pdf",
+                    file_name=f"TE3_PreFeasibility_Report_{clean_zip}.pdf",
                     mime="application/pdf"
                 )
 
     else:
-        st.error(f"❌ Geocoding Exception: Could not find geographic coordinates for ZIP code `{clean_zip}`.")
+        if geo_error:
+            st.error(f"❌ Location lookup failed: {geo_error}. Please try again in a few minutes.")
+        else:
+            st.error(f"❌ ZIP code `{clean_zip}` was not found. Check the ZIP code and try again.")
 
 elif submit_button and not is_valid_zip:
     st.sidebar.error("⚠️ Invalid ZIP Code: Please enter a valid 5-digit US ZIP code to proceed with the evaluation.")

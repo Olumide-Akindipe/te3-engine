@@ -1,1 +1,29 @@
+## Local environment secret variables
 .env
+
+## Streamlit cloud secret files
+.streamlit/secrets.toml
+
+## Python runtime caching directories
+__pycache__/
+*.pyc
+
+##Virtual environment directories
+.venv/
+
+## Test Cache
+.pytest_cache/
+
+## Local Git backup from folder switch
+.git_backup_local/
+
+## Local backups and editor settings
+backup_pre_release/
+.vscode/
+
+## Sample PDF files
+*.pdf
+!samples/*.pdf
+
+##Private notes
+private_notes/

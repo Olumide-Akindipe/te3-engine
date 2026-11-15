@@ -1,0 +1,39 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+type: software
+title: "TE3 Engine: Techno-Economic Evaluation Engine"
+abstract: >-
+  TE3 Engine is a Streamlit screening tool for municipal solar photovoltaic
+  and battery energy storage investments in New York State. From a ZIP code,
+  a facility type and a solar array size, it estimates annual solar
+  generation, savings by revenue stream, net capital cost, simple payback and
+  indicative backup duration, and exports a four page pre-feasibility
+  screening report.
+authors:
+  - family-names: Akindipe
+    given-names: Stephen Olumide
+    affiliation: "Independent Researcher, Albany, NY, USA"
+    orcid: "https://orcid.org/0000-0002-1846-9662"
+version: "1.0.0"
+date-released: "2026-11-15"
+license: MIT
+repository-code: "https://github.com/Olumide-Akindipe/te3-engine"
+url: "https://te3-engine.streamlit.app"
+keywords:
+  - solar photovoltaic
+  - battery energy storage
+  - municipal energy
+  - techno-economic screening
+  - New York State
+  - NYISO demand response
+  - PVWatts
+  - Streamlit
+references:
+  - type: report
+    title: "TE3 Engine: A Techno-Economic Screening Framework for Municipal Solar PV and Battery Storage, New York State Implementation (Version 1). Working Paper, Revision 2"
+    authors:
+      - family-names: Akindipe
+        given-names: Stephen Olumide
+        orcid: "https://orcid.org/0000-0002-1846-9662"
+    year: 2026
+    month: 11

@@ -1,0 +1,8 @@
+# TE3 Engine Version 1 runtime dependencies [FIX M5]
+# Tested with the versions noted. Run "pip freeze" on the deployment machine and pin exact versions if needed.
+streamlit>=1.40,<2        # tested 1.66.1 (review) and the developer's local version
+fpdf2>=2.7,<3             # tested 2.8.9; 2.7+ required for multi_cell dry_run and new_x/new_y
+requests>=2.31,<3
+python-dotenv>=1.0,<2
+# Test only
+pytest>=8
