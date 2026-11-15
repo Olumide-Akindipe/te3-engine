@@ -1,5 +1,7 @@
 # TE3 Engine: Techno-Economic Evaluation Engine
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24239224.svg)](https://doi.org/10.5281/zenodo.24239224)
+
 TE3 Engine is a Streamlit screening tool for municipal solar photovoltaic (PV) and battery energy storage system (BESS) investments in New York State. From a ZIP code, a facility type and a solar array size, it estimates annual solar generation, the share of facility electricity use met by solar, annual savings by revenue stream, net capital cost, simple payback and, when selected, an indicative backup duration. It exports a four page pre-feasibility screening report as a PDF.
 
 Results are screening estimates. They are intended to show whether a detailed study is warranted. They are not a design, an investment grade analysis, or tax or legal advice.
@@ -111,13 +113,13 @@ Later versions: net present value, coverage beyond New York State with utility s
 
 Software:
 
-Akindipe, S. O. (2026). *TE3 Engine: Techno-Economic Evaluation Engine* (Version 1.0) [Computer software]. https://github.com/Olumide-Akindipe/te3-engine
+Akindipe, S. O. (2026). *TE3 Engine: Techno-Economic Evaluation Engine* (Version 1.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.24239224
 
 Working paper:
 
 Akindipe, S. O. (2026). *TE3 Engine: A Techno-Economic Screening Framework for Municipal Solar PV and Battery Storage, New York State Implementation (Version 1).* Working Paper, Revision 2. Albany, NY.
 
-DOIs will be added when the release is archived.
+The working paper DOI will be added when the paper is deposited.
 
 ## License
 
