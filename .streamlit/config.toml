@@ -1,0 +1,10 @@
+# TE3 Engine Streamlit settings. Contains no secrets; safe to commit.
+
+[client]
+# Hide Python tracebacks from visitors. Errors still appear in the Streamlit Cloud logs.
+showErrorDetails = "none"
+# Show only the viewer menu, not developer options.
+toolbarMode = "viewer"
+
+[server]
+enableXsrfProtection = true

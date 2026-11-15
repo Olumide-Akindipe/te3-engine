@@ -1115,6 +1115,18 @@ def fetch_solar_resource_data(lat, lon, api_key):
 # 7. EXECUTION PIPELINE
 # =====================================================================
 if st.session_state.simulation_active and is_valid_zip:
+        # [FIX SEC] Limit new ZIP lookups per session: each new ZIP calls Nominatim and PVWatts.
+    # Changing facility, size or options for the same ZIP uses the one hour cache and is not counted.
+    import time
+    zip_lookups = st.session_state.setdefault("zip_lookups", {})
+    if clean_zip not in zip_lookups:
+        now = time.time()
+        recent = [t for t in zip_lookups.values() if now - t < 3600]
+        if len(recent) >= 20:
+            st.warning("This session has checked 20 new ZIP codes in the last hour. Please try again later.")
+            st.stop()
+        zip_lookups[clean_zip] = now
+
     geo_error = None
     with st.spinner("🌍 Locating ZIP code..."):
         try:

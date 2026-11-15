@@ -75,6 +75,14 @@ NREL_API_KEY=your_key_here
 
 Never commit `.env`. It is listed in `.gitignore`. The app never displays the key, including in error messages.
 
+## Privacy
+
+TE3 does not store the information you enter. The ZIP code is sent to OpenStreetMap Nominatim to find its location, and the coordinates are sent to the PVWatts API to retrieve solar data. The app is hosted on Streamlit Community Cloud, which collects standard usage data under its own privacy policy.
+
+## Security
+
+To report a security issue, see `SECURITY.md`.
+
 ## Running the app
 
 ```bash
