@@ -40,8 +40,8 @@ if not NREL_API_KEY:
 st.markdown("""
     <style>
         /* 🟩 1. GLOBAL TYPOGRAPHY UPGRADE */
-        html, body, [class*="css"], .stMarkdown p, .stMarkdown li {
-            font-size: 1.15rem !important; /* Increases default prose base text */
+            .stMarkdown p, .stMarkdown li {
+                font-size: 1rem !important; /* [FIX UI] base text at Streamlit default; html no longer scaled */
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
             line-height: 1.6 !important;
         }
@@ -50,6 +50,8 @@ st.markdown("""
         .block-container {
             padding-top: 2rem !important;
             padding-bottom: 3rem !important;
+            padding-left: 2rem !important;   /* [FIX UI] wider content area */
+            padding-right: 2rem !important;
         }
 
         /* 🟩 3. BRANDING HEADER CONTAINER (PRESERVED & SHARPENED) */
@@ -62,7 +64,7 @@ st.markdown("""
             box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
         .header-title {
-            font-size: 2.5rem !important;
+            font-size: 2rem !important;
             font-weight: 800 !important;
             margin: 0 !important;
             color: #ffffff !important;
@@ -82,7 +84,7 @@ st.markdown("""
             background-color: #f1f5f9 !important;
         }
         [data-testid="stSidebar"] label p {
-            font-size: 1.2rem !important; /* Clarifies widget selection labels */
+            font-size: 1rem !important; /* [FIX UI] widget labels */
             font-weight: 600 !important;
             color: #1e293b !important;
         }
@@ -104,14 +106,14 @@ st.markdown("""
         
         /* Metric Numbers & Labels Deep Nesting Targets */
         [data-testid="stMetricValue"] {
-            font-size: 2.1rem !important; /* Strong executive data focus */
+            font-size: 1.6rem !important; /* [FIX UI] metric values */
             font-weight: 700 !important;
             color: #0f172a !important;
             line-height: 1.2 !important;
             white-space: nowrap !important; /* 🟢 FIXED: Prevents numbers and units from clipping/wrapping on zoom */
         }
         [data-testid="stMetricLabel"] p {
-            font-size: 1.1rem !important; /* Legible metric titles */
+            font-size: 0.95rem !important; /* [FIX UI] metric titles */
             font-weight: 500 !important;
             color: #475569 !important;
         }
@@ -160,14 +162,14 @@ st.markdown(
     """
     <div style="
         background-color: #112d4e; 
-        padding: 35px 40px; 
+        padding: 24px 32px; 
         border-radius: 8px; 
         box-shadow: 0 4px 15px rgba(0,0,0,0.15);
         margin-bottom: 25px;
     ">
         <h1 style="
             color: #ffffff; 
-            font-size: 42px; 
+            font-size: 32px; 
             font-weight: 800; 
             margin: 0 0 12px 0;
             display: flex;
@@ -179,7 +181,7 @@ st.markdown(
         </h1>
         <p style="
             color: #ffcc00; 
-            font-size: 18px; 
+            font-size: 14px; 
             font-weight: 700; 
             text-transform: uppercase;
             letter-spacing: 1.5px;
@@ -320,6 +322,11 @@ st.markdown(
             text-align: center !important;
         }
 
+        /* [FIX UI] Export PDF button: room around the label */
+        div[data-testid="stDownloadButton"] button {
+            padding: 12px 24px !important;
+        }
+
         /* 5. Interactive hover performance states */
         button[data-testid="stBaseButton-secondary"]:hover {
             background-color: #1e7e34 !important;
@@ -347,10 +354,10 @@ st.sidebar.markdown("### 🏢 Infrastructure Profile")
 facility_selection = st.sidebar.selectbox("Asset Classification Type:", list(FACILITY_PROFILES.keys()))
 system_capacity_kw = st.sidebar.slider("Proposed Solar Capacity (kW):", min_value=10, max_value=500, value=50, step=10)
 
-# Section 3: Interconnection Strategy
+# Section 3: System Options
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🔌 Interconnection Strategy")
-enable_battery = st.sidebar.checkbox("Deploy Battery Storage (BESS)", value=False)
+st.sidebar.markdown("### 🔌 System Options")
+enable_battery = st.sidebar.checkbox("Battery Storage (BESS)", value=False)
 
 bess_duration = 2
 if enable_battery:
@@ -360,8 +367,8 @@ if enable_battery:
         format_func=lambda x: f"{x}-Hour Setup (Battery Peak Shaving Focus)" if x == 2 else f"{x}-Hour Setup (Emergency Reserves Focus)"
     )
 
-# Section 3: Interconnection Strategy (continued)
-enable_net_metering = st.sidebar.checkbox("Enable Net Energy Metering (NEM)", value=False)
+# Section 3: System Options (continued)
+enable_net_metering = st.sidebar.checkbox("Net Energy Metering (NEM)", value=False)
 # [FIX S1] Peak shaving needs a demand charge; lighting tariffs (PSC No. 214) have none
 shaving_excluded = not FACILITY_PROFILES[facility_selection].get("demand_charge")
 shaving_disabled = (not enable_battery) or shaving_excluded
@@ -373,18 +380,18 @@ if dr_disabled:
     st.session_state["cb_demand_response"] = False
 # [FIX UI2] Hover help explains why an option is greyed out
 enable_peak_shaving = st.sidebar.checkbox(
-    "Enable Battery Peak Shaving",
+    "Battery Peak Shaving",
     key="cb_peak_shaving",
     disabled=shaving_disabled,
     help=("Unavailable: this facility's tariff has no demand charge." if shaving_excluded
-          else "Requires battery storage. Check 'Deploy Battery Storage (BESS)' to enable." if not enable_battery
+          else "Requires battery storage. Check 'Battery Storage (BESS)' to enable." if not enable_battery
           else "Uses the battery to lower the facility's monthly peak demand charge.")
 )
 enable_demand_response = st.sidebar.checkbox(
-    "Enable NYISO DR Market VPP",
+    "NYISO Demand Response (SCR)",
     key="cb_demand_response",
     disabled=dr_disabled,
-    help=("Requires battery storage. Check 'Deploy Battery Storage (BESS)' to enable." if dr_disabled
+    help=("Requires battery storage. Check 'Battery Storage (BESS)' to enable." if dr_disabled
           else "Enrolls battery capacity in the NYISO Special Case Resources (SCR) program.")
 )
 # [FIX B6] A disabled checkbox keeps its last value, so battery-dependent options are forced off without a battery
@@ -399,7 +406,7 @@ islanding_excluded = FACILITY_PROFILES[facility_selection]["base_kw"] == 0
 if islanding_excluded:  # [FIX UI1]
     st.session_state["cb_islanding"] = False
 enable_islanding = st.sidebar.checkbox(
-    "Enable Microgrid Islanding (Backup for Grid Outages)",
+    "Microgrid Islanding (Backup Power)",
     key="cb_islanding",
     disabled=islanding_excluded,
     help="Models backup power duration during a grid outage. Requires battery storage."  # [FIX UI2]
@@ -411,7 +418,7 @@ if islanding_excluded:
         "Unmetered accounts have no defined critical load baseline."
     )
 elif enable_islanding and not enable_battery:  # [FIX UI3]
-    st.sidebar.caption("Backup duration requires battery storage. Check 'Deploy Battery Storage (BESS)' to model it.")
+    st.sidebar.caption("Backup duration requires battery storage. Check 'Battery Storage (BESS)' to model it.")
 
 # Section 4: Submit Button
 st.sidebar.markdown("---")
@@ -421,6 +428,13 @@ try:
     submit_button = st.sidebar.button(label=run_label, width="stretch")  # [FIX M4] Streamlit 1.46+
 except TypeError:
     submit_button = st.sidebar.button(label=run_label, use_container_width=True)  # older Streamlit
+
+# [FIX CREDIT] Author, version, license and DOI shown in the sidebar
+st.sidebar.caption(
+    "TE3 Engine v1.0 · Developed by Stephen Olumide Akindipe · "
+    "[MIT License](https://github.com/Olumide-Akindipe/te3-engine/blob/main/LICENSE) · "
+    "[DOI 10.5281/zenodo.24239224](https://doi.org/10.5281/zenodo.24239224)"
+)
 
 # Initiating String validation immediately the user clicks submit button
 
@@ -610,10 +624,11 @@ class BrandedExecutivePDF(FPDF):
         self.set_text_color(0, 0, 0)
 
     def footer(self):
-        self.set_y(-15)
+        self.set_y(-16)  # [FIX CREDIT] two line footer with author and DOI
         self.set_font("Helvetica", "I", 8)
         self.set_text_color(150, 150, 150)
-        self.cell(0, 10, f"Page {self.page_no()} | Solar resource: NSRDB via PVWatts v8 (National Laboratory of the Rockies)", align="C")
+        self.cell(0, 5, "TE3 Engine v1.0 | Stephen Olumide Akindipe | https://doi.org/10.5281/zenodo.24239224", align="C", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        self.cell(0, 5, f"Page {self.page_no()} | Solar resource: NSRDB via PVWatts v8 (National Laboratory of the Rockies)", align="C")
 
 
 def _section_title(pdf, text):
@@ -748,7 +763,7 @@ def generate_comprehensive_pdf(zipcode, city, sun_hours, capacity, facility, bat
 
     pdf = BrandedExecutivePDF()
     pdf.set_title(f"TE3 Pre-Feasibility Screening Report - {facility} - {zipcode}")  # [FIX P42]
-    pdf.set_author("TE3 Engine")
+    pdf.set_author("Stephen Olumide Akindipe (TE3 Engine v1.0)")  # [FIX CREDIT]
     pdf.set_auto_page_break(auto=True, margin=18)
 
     # ---------------- PAGE 1: title, key results, summary, screening notes ----------------
@@ -1313,7 +1328,7 @@ if st.session_state.simulation_active and is_valid_zip:
                     """, unsafe_allow_html=True)
 
                 if enable_islanding and not enable_battery:  # [FIX A3]
-                    st.warning("🛡️ **Backup Power Duration:** Microgrid islanding requires battery storage. Enable BESS to model backup power duration.")  # [FIX UI3]
+                    st.warning("🛡️ **Backup Power Duration:** Microgrid islanding requires battery storage. Select Battery Storage (BESS) to model backup power duration.")  # [FIX UI3]
                 elif enable_islanding:
                     st.markdown(f"""
                         <div class="resilience-badge">
@@ -1325,32 +1340,32 @@ if st.session_state.simulation_active and is_valid_zip:
                     
             with col_fin2:
                 st.markdown("### 📜 Generate Report")
-                st.write("View a detailed report to enhance your energy investment decision-making:")
+                st.write("Download a four page PDF with the inputs, results, formulas, sources and screening notes for this configuration.")
                 
-            with st.spinner("Generating PDF report..."):
-                pdf_data = generate_comprehensive_pdf(
-                    zipcode=clean_zip, 
-                    city=city_label, 
-                    sun_hours=annual_sun_hours, 
-                    capacity=final_capacity, 
-                    facility=facility_selection, 
-                    battery=enable_battery, 
-                    duration=bess_duration, 
-                    net_meter=enable_net_metering, 
-                    shaving=enable_peak_shaving,
-                    dr=enable_demand_response, 
-                    island=enable_islanding, 
-                    results=metrics,
-                    dr_dispatch_factor=DR_DISPATCH_FACTORS.get(facility_selection, 0.0),
-                    dr_capacity_rate=DR_CAPACITY_RATE
-                )
+                with st.spinner("Generating PDF report..."):
+                    pdf_data = generate_comprehensive_pdf(
+                        zipcode=clean_zip, 
+                        city=city_label, 
+                        sun_hours=annual_sun_hours, 
+                        capacity=final_capacity, 
+                        facility=facility_selection, 
+                        battery=enable_battery, 
+                        duration=bess_duration, 
+                        net_meter=enable_net_metering, 
+                        shaving=enable_peak_shaving,
+                        dr=enable_demand_response, 
+                        island=enable_islanding, 
+                        results=metrics,
+                        dr_dispatch_factor=DR_DISPATCH_FACTORS.get(facility_selection, 0.0),
+                        dr_capacity_rate=DR_CAPACITY_RATE
+                    )
                 
-                st.download_button(
-                    label="Download PDF",
-                    data=bytes(pdf_data),
-                    file_name=f"TE3_PreFeasibility_Report_{clean_zip}.pdf",
-                    mime="application/pdf"
-                )
+                    st.download_button(
+                        label="Download PDF",
+                        data=bytes(pdf_data),
+                        file_name=f"TE3_PreFeasibility_Report_{clean_zip}.pdf",
+                        mime="application/pdf"
+                    )
 
     else:
         if geo_error:

@@ -60,20 +60,20 @@ def run_app():
             at.run()
             boxes = {c.label: c for c in at.sidebar.checkbox}
             if battery:
-                boxes["Deploy Battery Storage (BESS)"].check()
+                boxes["Battery Storage (BESS)"].check()
                 at.run()
                 if hours == 4:
                     at.sidebar.selectbox[1].set_value(4)
                     at.run()
             boxes = {c.label: c for c in at.sidebar.checkbox}
             if nem:
-                boxes["Enable Net Energy Metering (NEM)"].check()
-            if shaving and not boxes["Enable Battery Peak Shaving"].disabled:
-                boxes["Enable Battery Peak Shaving"].check()
-            if dr and not boxes["Enable NYISO DR Market VPP"].disabled:
-                boxes["Enable NYISO DR Market VPP"].check()
-            if island and not boxes["Enable Microgrid Islanding (Backup for Grid Outages)"].disabled:
-                boxes["Enable Microgrid Islanding (Backup for Grid Outages)"].check()
+                boxes["Net Energy Metering (NEM)"].check()
+            if shaving and not boxes["Battery Peak Shaving"].disabled:
+                boxes["Battery Peak Shaving"].check()
+            if dr and not boxes["NYISO Demand Response (SCR)"].disabled:
+                boxes["NYISO Demand Response (SCR)"].check()
+            if island and not boxes["Microgrid Islanding (Backup Power)"].disabled:
+                boxes["Microgrid Islanding (Backup Power)"].check()
             at.run()
             at.sidebar.button[0].click()
             at.run()
