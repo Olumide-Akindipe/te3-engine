@@ -45,7 +45,8 @@ The model applies the 30% federal Investment Tax Credit (Section 48E) to every r
 - National Grid Upstate New York Service Rates (PSC No. 220 and PSC No. 214): demand charges and tariff classes
 - NYISO Special Case Resources program rules and 2026-27 capacity accreditation factors: demand response
 - PVWatts v8 API with National Solar Radiation Database (NSRDB) data, National Laboratory of the Rockies (formerly NREL)
-- OpenStreetMap Nominatim: ZIP code geocoding
+- GeoNames postal code data (https://www.geonames.org/, CC BY 4.0, retrieved 2026-11-18): ZIP code locations
+- OpenStreetMap Nominatim: fallback for ZIP codes not in the GeoNames table
 
 Full citations and links are in the working paper and the Technical Reference Manual.
 

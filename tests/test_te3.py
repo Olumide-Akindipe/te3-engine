@@ -1,3 +1,4 @@
+import os
 """Automated regression tests for TE3 Engine Version 1 [FIX M5].
 Expected values follow te3-verification-checklist.md (Rev 1.4, C22 profiles). Run: pytest -q"""
 from conftest import metrics
@@ -101,3 +102,15 @@ def test_p43_pdf_unicode_place_name(run_app, monkeypatch):
     at = run_app("Municipal Office Building", 50)
     assert not at.exception
     assert at.metric
+
+def test_g1_runs_with_both_services_down(run_app, monkeypatch, tmp_path):
+    # [FIX G1, G2] With the bundled tables, Nominatim and PVWatts outages do not block a New York run
+    import conftest
+    table = tmp_path / "solar.csv"
+    table.write_text("zip,lat,lon,solrad_annual,retrieved,source\n"
+                     f"12205,42.72,-73.82,{conftest.SOLRAD},2026-11-18,PVWatts v8\n")
+    monkeypatch.setenv("TE3_ZIP_TABLE", os.path.join(conftest.ROOT, "data", "us_zip_centroids.csv"))
+    monkeypatch.setenv("TE3_SOLAR_TABLE", str(table))
+    at = run_app("Police Station", 130, geo_mode="error", solar_mode="error")
+    assert not at.error
+    assert metrics(at)["Estimated Annual Savings"] == "$12,828.90 / yr"

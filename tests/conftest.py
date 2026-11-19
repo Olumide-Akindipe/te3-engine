@@ -8,6 +8,9 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("NREL_API_KEY", "TEST_KEY_DO_NOT_USE")
+os.environ["TE3_ZIP_TABLE"] = ""          # [FIX G1] existing tests exercise the mocked Nominatim path
+os.environ["TE3_SOLAR_TABLE"] = ""        # [FIX G2] existing tests exercise the mocked PVWatts path
+os.environ["TE3_RETRY_BASE_DELAY"] = "0"  # [FIX G2] no waiting between retries in tests
 
 APP = os.path.join(ROOT, "app.py")
 SOLRAD = 4.5316  # kWh/m2/day; reproduces 184,917 kWh for 130 kW (verification checklist V-34)

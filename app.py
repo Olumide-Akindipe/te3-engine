@@ -456,20 +456,28 @@ if not is_valid_zip and clean_zip and not submit_button:
 # =====================================================================
 # 3. DYNAMIC GEOLOCATION ENGINE
 # =====================================================================
+from zip_lookup import lookup_zip  # [FIX G1] bundled ZIP table; Nominatim is the fallback
+from te3_resilience import get_with_retry, lookup_solrad  # [FIX G2] retries and optional solar table
+
 class GeocodeError(Exception):
     """[FIX M1] Raised for network or service errors, so a temporary failure is not cached for an hour."""
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=60 * 60 * 24 * 30, max_entries=5000)  # [FIX G2] ZIP locations do not change
 def get_coordinates_from_zip(zipcode):
+    local = lookup_zip(zipcode)  # [FIX G1] no network call for ZIP codes in the bundled table
+    if local:
+        return local
     geo_url = "https://nominatim.openstreetmap.org/search"
     params = {"postalcode": zipcode, "country": "United States", "format": "json", "addressdetails": 1}
     # [FIX L5] Nominatim usage policy asks for an identifying User-Agent with a contact
     headers = {"User-Agent": "TE3-Engine/1.0 (municipal energy screening tool; https://github.com/Olumide-Akindipe)"}
     try:
-        geo_response = requests.get(geo_url, params=params, headers=headers, timeout=10)
+        geo_response = get_with_retry(geo_url, params=params, headers=headers, timeout=10)  # [FIX G2]
     except requests.RequestException as e:
         raise GeocodeError(f"the location service could not be reached ({type(e).__name__})") from None
+    if geo_response.status_code == 429:  # [FIX G1]
+        raise GeocodeError("the location service is receiving too many requests (HTTP 429)")
     if geo_response.status_code != 200:
         raise GeocodeError(f"the location service returned HTTP {geo_response.status_code}")
     results = geo_response.json()
@@ -1083,7 +1091,7 @@ def generate_comprehensive_pdf(zipcode, city, sun_hours, capacity, facility, bat
     pdf.ln(3)
     _paragraph(pdf, "Data vintages: CBECS 2018 (facility benchmarks); EIA-861 2024 (energy rate); National Grid PSC No. 220 "
                     "service rates and 2026 class load shapes; NYISO 2026-27 capacity accreditation; PVWatts v8 with NSRDB "
-                    "typical-year data. Full source register: TE3 Technical Reference Manual.",  # [FIX P3]
+                    "typical-year data; ZIP code locations from GeoNames (CC BY 4.0). Full source register: TE3 Technical Reference Manual.",  # [FIX P3]
                size=7.5, style="I", color=REPORT_MUTED, line_h=4)
 
     return pdf.output()
@@ -1095,12 +1103,12 @@ class SolarDataError(Exception):
     """[FIX H1] Raised instead of returning None, so failures are not cached and the API key is never displayed."""
 
 
-@st.cache_data(ttl=3600, show_spinner="Retrieving solar resource data...")
+@st.cache_data(ttl=60 * 60 * 24 * 30, max_entries=5000, show_spinner="Retrieving solar resource data...")  # [FIX G2]
 def fetch_solar_resource_data(lat, lon, api_key):
     params = {"api_key": api_key, "lat": lat, "lon": lon, "system_capacity": 4, "azimuth": 180,
               "tilt": 20, "array_type": 1, "module_type": 0, "losses": 14}
     try:
-        res = requests.get("https://developer.nlr.gov/api/pvwatts/v8.json", params=params, timeout=12)
+        res = get_with_retry("https://developer.nlr.gov/api/pvwatts/v8.json", params=params, timeout=12)  # [FIX G2]
     except requests.RequestException as e:
         raise SolarDataError(f"the service could not be reached ({type(e).__name__})") from None
     if res.status_code != 200:
@@ -1115,8 +1123,8 @@ def fetch_solar_resource_data(lat, lon, api_key):
 # 7. EXECUTION PIPELINE
 # =====================================================================
 if st.session_state.simulation_active and is_valid_zip:
-        # [FIX SEC] Limit new ZIP lookups per session: each new ZIP calls Nominatim and PVWatts.
-    # Changing facility, size or options for the same ZIP uses the one hour cache and is not counted.
+        # [FIX SEC] Limit new ZIP lookups per session. A ZIP outside the bundled tables calls Nominatim or PVWatts.
+    # Changing facility, size or options for the same ZIP uses the cache and is not counted.
     import time
     zip_lookups = st.session_state.setdefault("zip_lookups", {})
     if clean_zip not in zip_lookups:
@@ -1151,11 +1159,13 @@ if st.session_state.simulation_active and is_valid_zip:
 
         # 1. Pull data utilizing the optimized, cached network function hook pointed to nlr.gov
         solar_error = ""
-        try:
-            daily_solrad_value = fetch_solar_resource_data(lat, lon, NREL_API_KEY)
-        except SolarDataError as e:  # [FIX H1]
-            daily_solrad_value = None
-            solar_error = str(e)
+        daily_solrad_value = lookup_solrad(clean_zip)  # [FIX G2] bundled PVWatts table first, if present
+        if daily_solrad_value is None:
+            try:
+                daily_solrad_value = fetch_solar_resource_data(lat, lon, NREL_API_KEY)
+            except SolarDataError as e:  # [FIX H1]
+                daily_solrad_value = None
+                solar_error = str(e)
 
         # 2. Convert daily solar resource to annual peak sun hours
         annual_sun_hours = None
