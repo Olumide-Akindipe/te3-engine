@@ -52,9 +52,22 @@ The model applies the 30% federal Investment Tax Credit (Section 48E) to every r
 
 Full citations and links are in the working paper and the Technical Reference Manual.
 
-## Installation
+## Privacy
 
-Requires Python 3.10 or newer.
+TE3 does not store the information you enter. The ZIP code is sent to OpenStreetMap Nominatim to find its location, and the coordinates are sent to the PVWatts API to retrieve solar data. The app is hosted on Streamlit Community Cloud, which collects standard usage data under its own privacy policy.
+
+## Security
+
+To report a security issue, see `SECURITY.md`.
+
+## Run locally (for developers and researchers)
+
+Most users only need the [live app](https://te3-engine.streamlit.app/). The steps below let you run TE3 on your own computer, check the calculations, or reproduce the archived release.
+
+<details>
+<summary>Installation, API key, running the app and tests</summary>
+
+**Requirements:** Python 3.10 or newer.
 
 ```bash
 git clone https://github.com/Olumide-Akindipe/te3-engine.git
@@ -66,28 +79,29 @@ source .venv/Scripts/activate      # Windows (Git Bash)
 python -m pip install -r requirements.txt
 ```
 
-## API key
-
-The app needs a free API key from the National Laboratory of the Rockies developer network: https://developer.nlr.gov/signup/
-
-**Local use:** copy `.env.example` to `.env` and add your key:
+**API key.** Get a free key from the National Laboratory of the Rockies developer network: https://developer.nlr.gov/signup/. Copy `.env.example` to `.env` and add your key:
 
 ```
 NREL_API_KEY=your_key_here
 ```
 
-**Streamlit Community Cloud:** add `NREL_API_KEY` under the app's Settings, Secrets.
+Never commit `.env`; it is listed in `.gitignore`. The app never displays the key, including in error messages.
 
-Never commit `.env`. It is listed in `.gitignore`. The app never displays the key, including in error messages.
+**Run the app:**
 
-## Privacy
+```bash
+streamlit run app.py
+```
 
-TE3 does not store the information you enter. The ZIP code is sent to OpenStreetMap Nominatim to find its location, and the coordinates are sent to the PVWatts API to retrieve solar data. The app is hosted on Streamlit Community Cloud, which collects standard usage data under its own privacy policy.
+**Run the tests:**
 
-## Security
+```bash
+python -m pytest -q
+```
 
-To report a security issue, see `SECURITY.md`.
+The automated tests mock the location and solar data services, so no API key or network connection is needed. They also run automatically on every push (see the Actions tab).
 
+</details>
 
 ## Limitations
 
