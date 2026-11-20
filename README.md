@@ -88,19 +88,6 @@ TE3 does not store the information you enter. The ZIP code is sent to OpenStreet
 
 To report a security issue, see `SECURITY.md`.
 
-## Running the app
-
-```bash
-streamlit run app.py
-```
-
-## Running the tests
-
-```bash
-python -m pytest -q
-```
-
-The 12 automated tests mock the geocoder and solar resource calls, so no API key or network connection is needed.
 
 ## Limitations
 
