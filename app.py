@@ -429,6 +429,9 @@ try:
 except TypeError:
     submit_button = st.sidebar.button(label=run_label, use_container_width=True)  # older Streamlit
 
+# [FIX FEEDBACK] Feedback form link
+st.sidebar.markdown("💬 [Share feedback or ask a question](https://forms.gle/66SMLuKAzCwH2uUJ7)")
+
 # [FIX CREDIT] Author, version, license and DOI shown in the sidebar
 st.sidebar.caption(
     "TE3 Engine v1.0 · Developed by Stephen Olumide Akindipe · "
@@ -1091,7 +1094,7 @@ def generate_comprehensive_pdf(zipcode, city, sun_hours, capacity, facility, bat
     pdf.ln(3)
     _paragraph(pdf, "Data vintages: CBECS 2018 (facility benchmarks); EIA-861 2024 (energy rate); National Grid PSC No. 220 "
                     "service rates and 2026 class load shapes; NYISO 2026-27 capacity accreditation; PVWatts v8 with NSRDB "
-                    "typical-year data; ZIP code locations from GeoNames (CC BY 4.0). Full source register: TE3 Technical Reference Manual.",  # [FIX P3]
+                    "typical-year data; ZIP code locations from GeoNames (CC BY 4.0). Full source register: TE3 Technical Reference Manual. Feedback: forms.gle/66SMLuKAzCwH2uUJ7",  # [FIX P3] [FIX FEEDBACK]
                size=7.5, style="I", color=REPORT_MUTED, line_h=4)
 
     return pdf.output()

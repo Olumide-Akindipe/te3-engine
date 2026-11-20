@@ -8,6 +8,8 @@ Results are screening estimates. They are intended to show whether a detailed st
 
 **Live app:** https://te3-engine.streamlit.app/ (no installation needed). If the app has been idle, it may take up to a minute to wake up.
 
+**Feedback:** [Share feedback or a question (3 minutes)](https://forms.gle/66SMLuKAzCwH2uUJ7) · Bug reports: [GitHub Issues](https://github.com/Olumide-Akindipe/te3-engine/issues)
+
 ![TE3 Engine system overview: inputs, data, model (formulas F1 to F11) and outputs, with planned work](docs/te3-overview.svg)
 
 ## Scope of Version 1
