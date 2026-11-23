@@ -1,4 +1,7 @@
 """
+# Copyright (c) 2026 Stephen Olumide Akindipe
+# SPDX-License-Identifier: MIT
+
 TE3 Engine: Facility archetype profiles (location-aware)
 
 The tool resolves inputs from a ZIP code. This module derives each archetype's

@@ -1,4 +1,7 @@
 """Tests for retries and the optional solar table."""
+# Copyright (c) 2026 Stephen Olumide Akindipe
+# SPDX-License-Identifier: MIT
+
 from unittest import mock
 
 import pytest

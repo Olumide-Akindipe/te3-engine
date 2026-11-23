@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Stephen Olumide Akindipe
+# SPDX-License-Identifier: MIT
+
 """Shared fixtures for the TE3 AppTest suite. API calls are mocked; no network or API key is needed."""
 import os
 import sys

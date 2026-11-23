@@ -1,4 +1,7 @@
 """Tests for the offline ZIP lookup."""
+# Copyright (c) 2026 Stephen Olumide Akindipe
+# SPDX-License-Identifier: MIT
+
 import os
 
 import pytest

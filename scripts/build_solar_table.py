@@ -1,4 +1,7 @@
 """
+# Copyright (c) 2026 Stephen Olumide Akindipe
+# SPDX-License-Identifier: MIT
+
 Build data/ny_solar_resource.csv: the PVWatts v8 annual solar resource for every
 New York ZIP code in data/us_zip_centroids.csv, with the app's exact parameters.
 

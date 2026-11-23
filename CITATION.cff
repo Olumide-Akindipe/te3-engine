@@ -14,9 +14,9 @@ authors:
     given-names: Stephen Olumide
     affiliation: "Independent Researcher, Albany, NY, USA"
     orcid: "https://orcid.org/0000-0002-1846-9662"
-version: "1.0.0"
+version: "1.0.1"
 doi: 10.5281/zenodo.24239224
-date-released: "2026-11-15"
+date-released: "2026-11-23"
 license: MIT
 repository-code: "https://github.com/Olumide-Akindipe/te3-engine"
 url: "https://te3-engine.streamlit.app"

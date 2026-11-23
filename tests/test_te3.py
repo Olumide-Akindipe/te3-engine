@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Stephen Olumide Akindipe
+# SPDX-License-Identifier: MIT
+
 import os
 """Automated regression tests for TE3 Engine Version 1 [FIX M5].
 Expected values follow te3-verification-checklist.md (Rev 1.4, C22 profiles). Run: pytest -q"""

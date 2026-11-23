@@ -1,4 +1,7 @@
 """
+# Copyright (c) 2026 Stephen Olumide Akindipe
+# SPDX-License-Identifier: MIT
+
 TE3 Engine: resilience settings
 
 get_with_retry  Retries an HTTP GET after a connection error or a temporary

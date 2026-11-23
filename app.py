@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Stephen Olumide Akindipe
+# SPDX-License-Identifier: MIT
+
 import os
 import re
 import html
@@ -253,7 +256,7 @@ SCR_MIN_DURATION_HOURS = 4  # [DR-1] SCR load reduction must be sustainable for 
 # [FIX ITC] One notice text for the app and the PDF. Source: IRS Notice 2025-42; 2025 federal tax law (OBBBA).
 # https://www.irs.gov/pub/irs-drop/n-25-42.pdf
 ITC_TIMING_NOTE = ("The 30% federal Investment Tax Credit applies to solar only if the project began construction by "
-                   "July 4, 2026 or be placed in service by December 31, 2027. Confirm eligibility with a tax expert. "
+                   "July 4, 2026 or is placed in service by December 31, 2027. Confirm eligibility with a tax expert. "
                    "Without the credit, net capital cost rises by 30% of the gross capital cost.")
 DR_DISPATCH_FACTORS = {
     "Municipal Office Building": 1.0,           ## Non-critical load; full battery available (ASSUMPTION)

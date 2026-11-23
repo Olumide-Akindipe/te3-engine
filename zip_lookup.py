@@ -1,4 +1,7 @@
 """
+# Copyright (c) 2026 Stephen Olumide Akindipe
+# SPDX-License-Identifier: MIT
+
 TE3 Engine: ZIP code lookup (Offline mode)
 
 Resolves a 5-digit ZIP code to coordinates, place name and state from a file deployed with the app. 
