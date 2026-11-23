@@ -129,6 +129,10 @@ Software:
 
 Akindipe, S. O. (2026). *TE3 Engine: Techno-Economic Evaluation Engine* (Version 1.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.24239224
 
+Technical Reference Manual:
+
+Akindipe, S. O. (2026). *TE3 Engine Technical Reference Manual, Revision 3 (Version 1.0.1)*. Zenodo. https://doi.org/10.5281/zenodo.24457953
+
 Working paper:
 
 Akindipe, S. O. (2026). *TE3 Engine: A Techno-Economic Screening Framework for Municipal Solar PV and Battery Storage, New York State Implementation (Version 1).* Working Paper, Revision 2. Albany, NY.
